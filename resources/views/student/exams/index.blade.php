@@ -15,8 +15,8 @@
     @unless ($hasSection)
         <div class="rounded-2xl border-l-4 border-[#f6c945] bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/70">
             <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#f6c945]/25 text-2xl">🏫</div>
-            <p class="font-semibold text-[#0a1f55]">You’re not assigned to a section yet.</p>
-            <p class="mt-1 text-sm text-slate-500">Please ask your adviser or the admin to assign your section so your exams can appear here.</p>
+            <p class="font-semibold text-[#0a1f55]">{{ $irregular ? 'You’re not enrolled in any subject yet.' : 'You’re not assigned to a section yet.' }}</p>
+            <p class="mt-1 text-sm text-slate-500">Please ask your adviser or the admin to {{ $irregular ? 'enroll you in your subjects' : 'assign your section' }} so your exams can appear here.</p>
         </div>
     @else
 
@@ -32,7 +32,9 @@
                     </button>
                 @endforeach
             </div>
-            <span class="rounded-full bg-[#0a1f55]/10 px-4 py-1.5 text-sm font-semibold text-[#0a1f55]">Section: {{ $section->name ?? '—' }}</span>
+            <span class="rounded-full bg-[#0a1f55]/10 px-4 py-1.5 text-sm font-semibold text-[#0a1f55]">
+                @if ($irregular) Irregular student @else Section: {{ $section->name ?? '—' }} @endif
+            </span>
         </div>
 
         {{-- AVAILABLE --}}

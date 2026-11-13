@@ -9,8 +9,10 @@ use App\Http\Controllers\ProfilePhotoController;
 use App\Http\Controllers\ResultController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\StudentExamController;
+use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\IrregularController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -34,16 +36,30 @@ Route::middleware('auth')->group(function () {
         Route::resource('users', UserController::class)
             ->only(['index', 'store', 'update', 'destroy']);
 
+        // Subjects and teacher assignments
+        Route::resource('subjects', SubjectController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::post('subjects/{subject}/assign', [SubjectController::class, 'assign'])->name('subjects.assign');
+        Route::delete('subject-assignments/{assignment}', [SubjectController::class, 'unassign'])->name('subjects.unassign');
+
+        // Sections: only the admin creates, renames, deletes and places students
+        Route::patch('sections/students/{user}', [SectionController::class, 'assign'])->name('sections.assign');
+        Route::resource('sections', SectionController::class)->only(['store', 'update', 'destroy']);
+
+        // Finalize / unlock grades
         Route::post('grades/lock', [GradeController::class, 'lock'])->name('grades.lock');
+
+        // Irregular students
+        Route::get('irregular', [IrregularController::class, 'index'])->name('irregular.index');
+        Route::post('irregular', [IrregularController::class, 'store'])->name('irregular.store');
+        Route::post('irregular/{student}/subjects', [IrregularController::class, 'enroll'])->name('irregular.enroll');
+        Route::post('irregular/{student}/regular', [IrregularController::class, 'regular'])->name('irregular.regular');
     });
 
     // ---------- Admin + Teacher ----------
     Route::middleware('role:admin,teacher')->group(function () {
 
-        // Sections
-        Route::patch('sections/students/{user}', [SectionController::class, 'assign'])->name('sections.assign');
-        Route::resource('sections', SectionController::class)
-            ->only(['index', 'store', 'update', 'destroy']);
+        // Sections (teachers see only their own, view only)
+        Route::get('sections', [SectionController::class, 'index'])->name('sections.index');
 
         // Exams
         Route::resource('exams', ExamController::class)->except('show');
@@ -57,7 +73,7 @@ Route::middleware('auth')->group(function () {
         Route::get('results/{result}', [ResultController::class, 'show'])->whereNumber('result')->name('results.show');
         Route::delete('results/{result}', [ResultController::class, 'destroy'])->name('results.destroy');
 
-        // Grades (grade sheet, exports and printouts)
+        // Grades (grade table, exports and printouts)
         Route::prefix('grades')->name('grades.')->group(function () {
             Route::get('/', [GradeController::class, 'index'])->name('index');
             Route::post('/sheet', [GradeController::class, 'save'])->name('save');

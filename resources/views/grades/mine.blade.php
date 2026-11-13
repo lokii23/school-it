@@ -4,13 +4,15 @@
 
 @section('content')
 @php
-    $fmt     = fn ($n) => \App\Support\Grading::fmt($n);
+    $fmtAvg  = fn ($n) => \App\Support\Grading::fmtAvg($n);
+    
     $genPass = \App\Support\Grading::passes($general);
     $badge = [
         'passed'   => ['Passed', 'bg-emerald-100 text-emerald-700'],
         'failed'   => ['Failed', 'bg-[#7a1230]/10 text-[#7a1230]'],
         'progress' => ['In progress', 'bg-[#f6c945]/30 text-[#7a5a00]'],
         'empty'    => ['—', 'text-slate-300'],
+        'inc'      => ['INC', 'bg-[#0a1f55]/10 text-[#0a1f55]'],
     ];
 @endphp
 
@@ -38,7 +40,7 @@
                                 style="transition: stroke-dashoffset 1.2s ease-out"/>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
-                        <span class="text-4xl font-extrabold">{{ $fmt($general) }}</span>
+                        <span class="text-4xl font-extrabold">{{ $fmtAvg($general) }}</span>
                         <span class="text-xs text-slate-300">1.00 is the highest</span>
                     </div>
                 </div>
@@ -58,11 +60,11 @@
                 </div>
                 <div class="rounded-2xl border-t-4 border-[#f6c945] bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
                     <p class="text-sm text-slate-500">Best subject average</p>
-                    <p class="mt-1 text-3xl font-bold text-[#0a1f55]">{{ $fmt($stats['top']) }}</p>
+                    <p class="mt-1 text-3xl font-bold text-[#0a1f55]">{{ $fmtAvg($stats['top']) }}</p>
                 </div>
                 <div class="rounded-2xl border-t-4 border-[#7a1230] bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
                     <p class="text-sm text-slate-500">Weakest subject average</p>
-                    <p class="mt-1 text-3xl font-bold text-[#7a1230]">{{ $fmt($stats['low']) }}</p>
+                    <p class="mt-1 text-3xl font-bold text-[#7a1230]">{{ $fmtAvg($stats['low']) }}</p>
                 </div>
             </div>
         </div>
@@ -94,11 +96,11 @@
                                     <p class="text-xs text-slate-400">{{ $g->teacher->name ?? '—' }} · {{ $g->locked ? '🔒 Finalized' : 'Preliminary' }}</p>
                                 </td>
                                 @foreach ($periods as $key => $label)
-                                    <td class="px-3 py-4 text-center font-medium tabular-nums text-slate-700">{{ $fmt($g->{$key}) }}</td>
+                                    <td class="px-3 py-4 text-center font-medium tabular-nums {{ $g->isInc($key) ? 'font-bold text-[#0a1f55]' : 'text-slate-700' }}">{{ $g->isInc($key) ? 'INC' : $fmtAvg($g->{$key}) }}</td>
                                 @endforeach
-                                <td class="px-4 py-4 text-center text-base font-bold tabular-nums {{ $g->average === null ? 'text-slate-300' : (\App\Support\Grading::passes($g->average) ? 'text-emerald-600' : 'text-[#7a1230]') }}">{{ $fmt($g->average) }}</td>
+                                <td class="px-4 py-4 text-center text-base font-bold tabular-nums {{ $g->has_inc ? 'text-[#0a1f55]' : ($g->average === null ? 'text-slate-300' : (\App\Support\Grading::passes($g->average) ? 'text-emerald-600' : 'text-[#7a1230]')) }}">{{ $g->has_inc ? 'INC' : $fmtAvg($g->average) }}</td>
                                 <td class="whitespace-nowrap px-3 py-4"><span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $bClass }}">{{ $bLabel }}</span></td>
-                                <td class="max-w-[220px] px-3 py-4 text-xs text-slate-500">{{ $g->remarks ?? '—' }}</td>
+                                <td class="max-w-[220px] px-3 py-4 text-xs text-slate-500">{{ $g->display_remarks ?: '—' }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -107,7 +109,8 @@
             <p class="border-t border-slate-100 bg-[#fbf8f1] px-5 py-3 text-xs text-slate-500">
                 <strong>1.00</strong> is the highest grade and <strong>3.00</strong> is the lowest passing grade. <strong>3.01 to 4.00</strong> is failed.
                 <strong>Preliminary</strong> grades can still change. <strong>Finalized</strong> grades have been confirmed by the admin.
-                A Passed or Failed status appears once all four periods are graded.
+                A Passed or Failed status appears once all {{ count($periods) }} periods are graded.
+                <strong>INC</strong> means incomplete: the average waits until it is replaced with a grade.
             </p>
         </div>
     @endif

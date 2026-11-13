@@ -76,7 +76,7 @@
         @php
             $st    = $stats->get($e->id);
             $taken = (int) ($st->taken ?? 0);
-            $total = (int) ($enrolled[$e->section_id] ?? 0);
+            $total = (int) ($enrolled[$e->id] ?? 0);
             $avg   = $st && $st->avg_pct !== null ? round($st->avg_pct) : null;
             $rate  = $taken ? round(($st->passed ?? 0) / $taken * 100) : null;
             $prog  = $total ? min(100, round($taken / $total * 100)) : 0;

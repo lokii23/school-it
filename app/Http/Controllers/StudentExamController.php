@@ -18,7 +18,8 @@ class StudentExamController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $hasSection = (bool) $user->section_id;
+        $irregular  = (bool) $user->is_irregular;
+        $hasSection = $irregular ? $user->enrollments()->exists() : (bool) $user->section_id;       
 
         // Record a 0 for anyone who started an exam and never came back in time
         $this->expireStaleAttempts($user->id);
@@ -28,7 +29,7 @@ class StudentExamController extends Controller
         if ($hasSection) {
             $pending = Exam::with('teacher')
                 ->withCount('questions')
-                ->where('section_id', $user->section_id)
+                ->forStudent($user)
                 ->has('questions')
                 ->whereDoesntHave('results', fn ($q) => $q->where('user_id', $user->id))
                 ->latest()
@@ -49,6 +50,7 @@ class StudentExamController extends Controller
             'hasSection' => $hasSection,
             'section'    => $user->section,
             'passing'    => self::PASSING,
+            'irregular'  => $irregular,
         ]);
     }
 
@@ -287,7 +289,7 @@ class StudentExamController extends Controller
 
     private function authorizeSection($user, Exam $exam): void
     {
-        abort_unless($user->section_id && (int) $exam->section_id === (int) $user->section_id, 403);
+        abort_unless($exam->isOpenToStudent($user), 403);
     }
 
     private function existingResult($user, Exam $exam): ?ExamResult

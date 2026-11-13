@@ -1,7 +1,7 @@
 @php
-    $fmt    = fn ($n) => \App\Support\Grading::fmt($n);
+    $fmtAvg = fn ($n) => \App\Support\Grading::fmtAvg($n);
     $logo   = asset('images/ccs-logo.png');
-    $labels = ['passed' => 'Passed', 'failed' => 'Failed', 'progress' => 'In progress', 'empty' => ''];
+    $labels = ['passed' => 'Passed', 'failed' => 'Failed', 'progress' => 'In progress', 'empty' => '', 'inc' => 'INC',];
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -48,8 +48,8 @@
         <div class="flex items-center gap-4 border-b-2 border-[#0a1f55] pb-4">
             <img src="{{ $logo }}" alt="Logo" class="h-16 w-16 object-contain">
             <div class="flex-1 text-center">
-                <p class="text-base font-extrabold tracking-wide text-[#0a1f55]">PROFESSIONAL ACADEMY OF THE PHILIPPINES</p>
-                <p class="text-sm font-semibold text-[#7a1230]">College of Computer Studies</p>
+                <p class="text-base font-extrabold tracking-wide " style="font-family: Old English Text MT; color:#BC0202" >Professional Academy of the Philippines</p>
+                <p class="text-sm font-semibold text-[#BC0202]">College of Computer Studies</p>
                 <p class="mt-1 text-sm font-bold uppercase tracking-widest">Report of Grades</p>
             </div>
             <div class="w-16"></div>
@@ -57,8 +57,8 @@
 
         <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
             <p><span class="text-slate-500">Student:</span> <strong>{{ $s->list_name }}</strong></p>
-            <p class="text-right"><span class="text-slate-500">Section:</span> <strong>{{ $s->section->name ?? '—' }}</strong></p>
-            <p><span class="text-slate-500">Email:</span> {{ $s->email }}</p>
+            <p class="text-right"><span class="text-slate-500">Section:</span> <strong>{{ $s->is_irregular ? 'Irregular' : ($s->section->name ?? '—') }}</strong>
+            <p><span class="text-slate-500">Student ID:</span> {{ $s->student_number ?? '—' }}</p>
             <p class="text-right"><span class="text-slate-500">Date:</span> {{ now()->format('M d, Y') }}</p>
         </div>
 
@@ -79,18 +79,18 @@
                         <tr>
                             <td class="font-medium">
                                 {{ $g->subject }}
-                                @if ($g->remarks) <div class="text-[10px] font-normal text-slate-500">{{ $g->remarks }}</div> @endif
+                                @if ($g->display_remarks) <div class="text-[10px] font-normal text-slate-500">{{ $g->display_remarks }}</div> @endif
                             </td>
                             @foreach ($periods as $key => $label)
-                                <td class="text-center tabular-nums">{{ $fmt($g->{$key}) }}</td>
+                                <td class="text-center tabular-nums">{{ $g->isInc($key) ? 'INC' : $fmtAvg($g->{$key}) }}</td>
                             @endforeach
-                            <td class="text-center font-bold tabular-nums">{{ $fmt($g->average) }}</td>
+                            <td class="text-center font-bold tabular-nums">{{ $g->has_inc ? 'INC' : $fmtAvg($g->average) }}</td>
                             <td>{{ $labels[$g->status] }}</td>
                         </tr>
                     @endforeach
                     <tr class="bg-slate-50 font-bold">
                         <td colspan="{{ count($periods) + 1 }}" class="text-right">General average</td>
-                        <td class="text-center tabular-nums">{{ $fmt($general) }}</td>
+                        <td class="text-center tabular-nums">{{ $fmtAvg($general) }}</td>
                         <td>{{ $general === null ? '' : (\App\Support\Grading::passes($general) ? 'Passed' : 'Below passing') }}</td>
                     </tr>
                 </tbody>

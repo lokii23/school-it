@@ -1,12 +1,12 @@
 @php
-    $fmt  = fn ($n) => \App\Support\Grading::fmt($n);
+    $fmtAvg = fn ($n) => \App\Support\Grading::fmtAvg($n);
     $logo = asset('images/ccs-logo.png');
 
     $avgs     = $grades->map(fn ($g) => $g->average)->filter(fn ($a) => $a !== null);
     $classAvg = $avgs->isNotEmpty() ? round($avgs->avg(), \App\Support\Grading::decimals()) : null;
     $passed   = $grades->filter(fn ($g) => $g->status === 'passed')->count();
     $failed   = $grades->filter(fn ($g) => $g->status === 'failed')->count();
-    $labels   = ['passed' => 'Passed', 'failed' => 'Failed', 'progress' => 'In progress', 'empty' => ''];
+    $labels   = ['passed' => 'Passed', 'failed' => 'Failed', 'progress' => 'In progress', 'empty' => '', 'inc' => 'INC',];
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -40,7 +40,7 @@
     <div class="flex items-center gap-4 border-b-2 border-[#0a1f55] pb-4">
         <img src="{{ $logo }}" alt="Logo" class="h-16 w-16 object-contain">
         <div class="flex-1 text-center">
-            <p class="text-lg font-extrabold tracking-wide text-[#0a1f55]">PROFESSIONAL ACADEMY OF THE PHILIPPINES</p>
+           <p class="text-base font-extrabold tracking-wide " style="font-family: Old English Text MT; color:#BC0202">Professional Academy of the Philippines</p>
             <p class="text-sm font-semibold text-[#7a1230]">College of Computer Studies</p>
             <p class="mt-1 text-sm font-bold uppercase tracking-widest">Class Record</p>
         </div>
@@ -71,9 +71,9 @@
                     <td class="text-center">{{ $i + 1 }}</td>
                     <td class="font-medium">{{ $s->list_name }}</td>
                     @foreach ($periods as $key => $label)
-                        <td class="text-center tabular-nums">{{ $g ? $fmt($g->{$key}) : '—' }}</td>
+                        <td class="text-center tabular-nums">{{ $g ? ($g->isInc($key) ? 'INC' : $fmtAvg($g->{$key})) : '—' }}</td>
                     @endforeach
-                    <td class="text-center font-bold tabular-nums">{{ $g ? $fmt($g->average) : '—' }}</td>
+                    <td class="text-center font-bold tabular-nums">{{ $g ? ($g->has_inc ? 'INC' : $fmtAvg($g->average)) : '—' }}</td>
                     <td>{{ $labels[$g?->status ?? 'empty'] }}</td>
                     <td class="text-xs">{{ $g->remarks ?? '' }}</td>
                 </tr>
@@ -83,7 +83,7 @@
 
     <div class="mt-4 flex flex-wrap gap-x-8 gap-y-1 text-sm">
         <p>Students: <strong>{{ $students->count() }}</strong></p>
-        <p>Class average: <strong>{{ $fmt($classAvg) }}</strong></p>
+        <p>Class average: <strong>{{ $fmtAvg($classAvg) }}</strong></p>
         <p>Passed: <strong>{{ $passed }}</strong></p>
         <p>Failed: <strong>{{ $failed }}</strong></p>
         @if ($grades->contains(fn ($g) => ! $g->locked))

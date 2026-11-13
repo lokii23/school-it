@@ -88,14 +88,18 @@
                                             {{ $u->name }}
                                             @if ($u->is(auth()->user())) <span class="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">You</span> @endif
                                         </p>
-                                        <p class="truncate text-xs text-slate-400">{{ $u->email }}</p>
+                                        <p class="truncate text-xs text-slate-400">
+                                            @if ($u->student_number) <span class="mr-1 rounded bg-[#f6c945]/30 px-1.5 py-0.5 font-semibold text-[#7a5a00]">{{ $u->student_number }}</span> @endif
+                                            {{ $u->email }}
+                                        </p>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4">
                                 <span class="rounded-full px-3 py-1 text-xs font-semibold capitalize {{ $roleStyle[$u->role] ?? 'bg-slate-100 text-slate-600' }}">{{ $u->role }}</span>
+                                @if ($u->is_irregular) <span class="ml-1 rounded-full bg-[#f6c945]/30 px-2.5 py-1 text-xs font-semibold text-[#7a5a00]">Irregular</span> @endif
                             </td>
-                            <td class="px-6 py-4 text-slate-600">{{ $u->section->name ?? '—' }}</td>
+                            <td class="px-6 py-4 text-slate-600">{{ $u->is_irregular ? 'By subject' : ($u->section->name ?? '—') }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-slate-400">{{ $u->created_at?->format('M d, Y') }}</td>
                             <td class="px-6 py-4">
                                 <div class="flex justify-end gap-2">

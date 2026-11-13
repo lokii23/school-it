@@ -73,7 +73,8 @@ class ImportStudents extends Command
         $rejected = $review = $temps = $unknownSections = [];
         $seen = [];
         $line = 1;
-
+        $nextNumber   = \App\Models\User::nextStudentNumber();
+        $firstNumber  = $nextNumber;
         DB::beginTransaction();
 
         try {
@@ -87,7 +88,8 @@ class ImportStudents extends Command
                 // email
                 $email = Str::lower($this->get($row, 'email'));
 
-                if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                // Accepts school-style addresses without a dot, like student1@professians
+                if (! preg_match('/^[^\s@,;<>()"]+@[^\s@,;<>()"]+$/', $email)) {
                     $rejected[] = [$line, $email, 'Missing or invalid email'];
                     continue;
                 }
@@ -154,6 +156,7 @@ class ImportStudents extends Command
                     'middle_name' => $middle ?: null,
                     'last_name'   => $last ?: null,
                     'email'       => $email,
+                    'student_number' => $nextNumber,
                     'password'    => $hash,
                     'role'        => 'student',
                     'section_id'  => $sectionId,
@@ -163,6 +166,7 @@ class ImportStudents extends Command
 
                 $seen[$email] = true;
                 $imported++;
+                $nextNumber++;
             }
 
             $dry ? DB::rollBack() : DB::commit();
@@ -179,6 +183,7 @@ class ImportStudents extends Command
         $this->info($dry ? 'DRY RUN, nothing was saved.' : 'Import finished.');
         $this->table(['Result', 'Count'], [
             ['Students imported' . ($dry ? ' (would be)' : ''), $imported],
+            ['Student IDs assigned', $imported ? $firstNumber . ' to ' . ($nextNumber - 1) : '—'],
             ['Skipped (see reasons below)', count($rejected)],
             ['Need a quick look (name or password)', count($review)],
             ['Given a temporary password', $tempCount],

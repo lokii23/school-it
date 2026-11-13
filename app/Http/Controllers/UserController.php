@@ -20,7 +20,8 @@ class UserController extends Controller
             ->when($request->q, function ($query, $search) {
                 $query->where(fn ($w) => $w
                     ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"));
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('student_number', 'like', "%{$search}%"));
             })
             ->orderBy('name')
             ->paginate(10)
@@ -62,9 +63,11 @@ class UserController extends Controller
             'last_name'   => trim($data['last_name']),
             'email'       => $data['email'],
             'role'        => $role,
-            'section_id'  => $role === 'student' ? ($data['section_id'] ?? null) : null,
+            'section_id'  => ($role === 'student' && ! $user->is_irregular) ? ($data['section_id'] ?? null) : null,
         ]);
-
+        if ($role !== 'student') {
+            $user->is_irregular = false;
+        }
         if (! empty($data['password'])) {
             $user->password = Hash::make($data['password']);
         }

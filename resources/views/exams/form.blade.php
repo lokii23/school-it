@@ -22,6 +22,14 @@
 <form method="POST"
       action="{{ $exam->exists ? route('exams.update', $exam) : route('exams.store') }}"
       x-data="{
+            map: {{ Js::from($subjectMap) }},
+            sectionId: {{ Js::from((string) old('section_id', $exam->section_id)) }},
+            subject: {{ Js::from(old('subject', $exam->subject)) }},
+            get subjects() {
+                const l = [...(this.map[this.sectionId] || [])];
+                if (this.subject && !l.includes(this.subject)) l.push(this.subject);
+                return l;
+            },
             passkey: {{ Js::from(old('passkey', $exam->passkey ?? '')) }},
             genKey() {
                 const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -71,21 +79,28 @@
             </div>
 
             <div>
-                <label class="mb-1.5 block text-sm font-medium text-slate-700">Subject</label>
-                <input type="text" name="subject" value="{{ old('subject', $exam->subject) }}" required maxlength="100"
-                       placeholder="e.g. Programming 1" class="{{ $inputBase }} @error('subject') ring-[#7a1230] @enderror">
-                @error('subject') <p class="mt-1.5 text-sm text-[#7a1230]">{{ $message }}</p> @enderror
-            </div>
-
-            <div>
                 <label class="mb-1.5 block text-sm font-medium text-slate-700">Section</label>
-                <select name="section_id" required class="{{ $inputBase }} @error('section_id') ring-[#7a1230] @enderror">
+                <select name="section_id" x-model="sectionId" @change="subject = ''" required
+                        class="{{ $inputBase }} @error('section_id') ring-[#7a1230] @enderror">
                     <option value="">— Choose section —</option>
                     @foreach ($sections as $s)
-                        <option value="{{ $s->id }}" @selected((string) old('section_id', $exam->section_id) === (string) $s->id)>{{ $s->name }}</option>
+                        <option value="{{ $s->id }}">{{ $s->name }}</option>
                     @endforeach
                 </select>
                 @error('section_id') <p class="mt-1.5 text-sm text-[#7a1230]">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label class="mb-1.5 block text-sm font-medium text-slate-700">Subject</label>
+                <select name="subject" x-model="subject" required :disabled="!sectionId"
+                        class="{{ $inputBase }} disabled:bg-slate-100 @error('subject') ring-[#7a1230] @enderror">
+                    <option value="">— Choose subject —</option>
+                    <template x-for="s in subjects" :key="s">
+                        <option :value="s" x-text="s" :selected="s === subject"></option>
+                    </template>
+                </select>
+                @error('subject') <p class="mt-1.5 text-sm text-[#7a1230]">{{ $message }}</p> @enderror
+                <p class="mt-1.5 text-xs text-slate-400">Only the subjects assigned to you for this section are listed.</p>
             </div>
             <div class="sm:col-span-2">
                 <label class="mb-1.5 block text-sm font-medium text-slate-700">

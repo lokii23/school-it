@@ -35,6 +35,12 @@
                 <p class="text-sm text-slate-400">{{ $user->email }}</p>
 
                 <dl class="mt-6 space-y-3 border-t border-slate-100 pt-5 text-left text-sm">
+                    @if ($user->student_number)
+                        <div class="flex justify-between gap-3">
+                            <dt class="text-slate-400">Student ID</dt>
+                            <dd class="font-semibold text-slate-700">{{ $user->student_number }}</dd>
+                        </div>
+                    @endif
                     <div class="flex justify-between gap-3">
                         <dt class="text-slate-400">Role</dt>
                         <dd class="font-semibold capitalize text-slate-700">{{ $user->role }}</dd>

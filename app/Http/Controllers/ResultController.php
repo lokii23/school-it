@@ -6,9 +6,11 @@ use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\ExamResult;
 use App\Models\Section;
+use App\Models\SubjectAssignment;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Support\Roster;
 
 class ResultController extends Controller
 {
@@ -23,7 +25,7 @@ class ResultController extends Controller
 
         $exams = Exam::with('section')
             ->withCount('questions')
-            ->when($user->role === 'teacher', fn ($q) => $q->where('user_id', $user->id))
+            ->managedBy($user)
             ->when($request->section_id, fn ($q, $s) => $q->where('section_id', $s))
             ->when($request->type, fn ($q, $t) => $q->where('type', $t))
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w
@@ -48,14 +50,12 @@ class ResultController extends Controller
             )
             ->groupBy('exam_id')->get()->keyBy('exam_id');
 
-        $enrolled = User::where('role', 'student')
-            ->whereIn('section_id', $exams->pluck('section_id')->unique())
-            ->selectRaw('section_id, count(*) as c')
-            ->groupBy('section_id')->pluck('c', 'section_id');
+        $enrolled = $exams->getCollection()->mapWithKeys(fn ($e) => [
+            $e->id => Roster::offering($e->section_id, $e->subject)->count(),
+        ]);
 
         // Overall numbers for the summary cards
-        $overall = ExamResult::whereHas('exam', fn ($q) => $q
-                ->when($user->role === 'teacher', fn ($w) => $w->where('user_id', $user->id)))
+        $overall = ExamResult::whereHas('exam', fn ($q) => $q->managedBy($user))
             ->selectRaw(
                 'count(*) as taken,
                  avg(case when total > 0 then score * 100.0 / total end) as avg_pct,
@@ -63,15 +63,13 @@ class ResultController extends Controller
                 [self::PASSING]
             )->first();
 
-        $examCount = Exam::when($user->role === 'teacher', fn ($q) => $q->where('user_id', $user->id))->count();
-
         return view('results.index', [
             'exams'     => $exams,
             'stats'     => $stats,
             'enrolled'  => $enrolled,
             'overall'   => $overall,
-            'examCount' => $examCount,
-            'sections'  => Section::orderBy('name')->get(),
+            'examCount' => Exam::managedBy($user)->count(),
+            'sections'  => $this->sectionsFor($user),
             'passing'   => self::PASSING,
         ]);
     }
@@ -134,10 +132,10 @@ class ResultController extends Controller
                 $r = $row['result'];
 
                 $status = match (true) {
-                    (bool) $r              => 'Submitted',
-                    $row['in_progress']    => 'In progress',
+                    (bool) $r                  => 'Submitted',
+                    $row['in_progress']        => 'In progress',
                     $exam->status === 'closed' => 'Missed',
-                    default                => 'Not taken yet',
+                    default                    => 'Not taken yet',
                 };
 
                 fputcsv($out, array_map([$this, 'safeCell'], [
@@ -158,7 +156,7 @@ class ResultController extends Controller
         }, $name, ['Content-Type' => 'text/csv']);
     }
 
-    // Flat list of every submission (kept from before)
+    // Flat list of every submission
     public function all(Request $request)
     {
         $user  = $request->user();
@@ -178,15 +176,11 @@ class ResultController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $exams = Exam::when($user->role === 'teacher', fn ($q) => $q->where('user_id', $user->id))
-            ->orderBy('title')
-            ->get(['id', 'title']);
-
         return view('results.all', [
             'results'  => $results,
             'stats'    => $stats,
-            'exams'    => $exams,
-            'sections' => Section::orderBy('name')->get(),
+            'exams'    => Exam::managedBy($user)->orderBy('title')->get(['id', 'title']),
+            'sections' => $this->sectionsFor($user),
             'passing'  => self::PASSING,
         ]);
     }
@@ -230,13 +224,9 @@ class ResultController extends Controller
     // A student's submission, answer by answer
     public function show(Request $request, ExamResult $result)
     {
-        $user = $request->user();
         $result->load(['student.section', 'exam']);
 
-        abort_unless(
-            $result->exam && ($user->role === 'admin' || $result->exam->user_id === $user->id),
-            403
-        );
+        abort_unless($result->exam && $result->exam->isManagedBy($request->user()), 403);
 
         return view('exams.review', [
             'exam'    => $result->exam,
@@ -250,9 +240,9 @@ class ResultController extends Controller
     // Reset an attempt so the student can retake the exam
     public function destroy(Request $request, ExamResult $result)
     {
-        $user = $request->user();
+        $result->load('exam');
 
-        abort_unless($user->role === 'admin' || $result->exam?->user_id === $user->id, 403);
+        abort_unless($result->exam && $result->exam->isManagedBy($request->user()), 403);
 
         $name = $result->student->name ?? 'The student';
 
@@ -293,7 +283,18 @@ class ResultController extends Controller
 
     private function authorizeExam(User $user, Exam $exam): void
     {
-        abort_unless($user->role === 'admin' || $exam->user_id === $user->id, 403);
+        abort_unless($exam->isManagedBy($user), 403);
+    }
+
+    // Admin: every section. Teacher: only the sections where they teach a subject.
+    private function sectionsFor(User $user)
+    {
+        return Section::orderBy('name')
+            ->when($user->role !== 'admin', fn ($q) => $q->whereIn(
+                'id',
+                SubjectAssignment::where('teacher_id', $user->id)->pluck('section_id')
+            ))
+            ->get();
     }
 
     // Every student of the section, with or without a result
@@ -303,8 +304,7 @@ class ResultController extends Controller
         $byUser   = $results->keyBy('user_id');
         $attempts = ExamAttempt::where('exam_id', $exam->id)->get()->keyBy('user_id');
 
-        $students = User::where('role', 'student')
-            ->where('section_id', $exam->section_id)
+        $students = Roster::offering($exam->section_id, $exam->subject)
             ->orderByRaw('COALESCE(last_name, name), name')
             ->get();
 
@@ -351,13 +351,13 @@ class ResultController extends Controller
 
                 $chosen = $a['chosen'] ?? null;
 
-                if ($chosen === null)                    $qa[$key]['skipped']++;
+                if ($chosen === null)                        $qa[$key]['skipped']++;
                 elseif ($chosen === ($a['correct'] ?? null)) $qa[$key]['right']++;
                 else { $qa[$key]['wrong']++; $qa[$key]['picks'][$chosen] = ($qa[$key]['picks'][$chosen] ?? 0) + 1; }
             }
         }
 
-        $out = collect($qa)->map(function ($q) {
+        return collect($qa)->map(function ($q) {
             $total = $q['right'] + $q['wrong'] + $q['skipped'];
             $q['total']       = $total;
             $q['pct_correct'] = $total ? (int) round($q['right'] / $total * 100) : 0;
@@ -365,8 +365,6 @@ class ResultController extends Controller
 
             return $q;
         })->sortBy('pct_correct')->values()->all();
-
-        return $out;
     }
 
     private function filtered(Request $request)
@@ -375,8 +373,8 @@ class ResultController extends Controller
 
         return ExamResult::query()
             ->whereHas('exam', fn ($q) => $q
-                ->when($user->role === 'teacher', fn ($q) => $q->where('user_id', $user->id))
-                ->when($request->section_id, fn ($q, $s) => $q->where('section_id', $s)))
+                ->managedBy($user)
+                ->when($request->section_id, fn ($w, $s) => $w->where('section_id', $s)))
             ->when($request->exam_id, fn ($q, $e) => $q->where('exam_id', $e))
             ->when($request->q, fn ($q, $s) => $q->whereHas('student', fn ($w) => $w->where('name', 'like', "%{$s}%")))
             ->when($request->status === 'passed', fn ($q) => $q->whereRaw('total > 0 and score * 100 >= total * ?', [self::PASSING]))

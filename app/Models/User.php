@@ -48,16 +48,22 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_irregular' => 'boolean',
         ];
     }
     protected static function booted(): void
     {
-        // Auto-build the full name whenever the name parts are set
         static::saving(function (User $user) {
+            // Build the full name from the name parts
             if ($user->first_name || $user->last_name) {
                 $user->name = collect([$user->first_name, $user->middle_name, $user->last_name])
                     ->filter()
                     ->implode(' ');
+            }
+
+            // Every student gets the next Student ID. A new account without a role is a student.
+            if (($user->role ?? 'student') === 'student' && ! $user->student_number) {
+                $user->student_number = static::nextStudentNumber();
             }
         });
     }
@@ -103,4 +109,16 @@ class User extends Authenticatable
 
         return $this->last_name . ', ' . $this->first_name . $mi;
     }
+
+    public const STUDENT_NUMBER_START = 2026001;
+
+    public static function nextStudentNumber(): int
+    {
+        $max = (int) static::max('student_number');
+
+        return max($max + 1, self::STUDENT_NUMBER_START);
+    }
+
+    public function assignments() { return $this->hasMany(SubjectAssignment::class, 'teacher_id'); }
+    public function enrollments() { return $this->hasMany(StudentEnrollment::class, 'student_id'); }
 }
