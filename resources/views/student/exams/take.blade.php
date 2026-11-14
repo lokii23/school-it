@@ -7,7 +7,7 @@
       x-data="{
           answers: {},
           total: {{ $exam->questions->count() }},
-          submitting: false,
+          confirmed: false,
           expired: false,
           draftKey: {{ Js::from($draftKey) }},
           remaining: {{ Js::from($remaining) }},
@@ -37,17 +37,47 @@
               const f = this.$root;
               f.requestSubmit ? f.requestSubmit() : f.submit();
           },
-          onSubmit(e) {
-              if (!this.expired) {
-                  const missing = this.total - this.answered;
-                  const msg = missing
-                      ? 'You still have ' + missing + ' unanswered question(s). Submit anyway? You cannot retake this exam.'
-                      : 'Submit your answers? You cannot retake this exam.';
-                  if (!confirm(msg)) { e.preventDefault(); return; }
-              }
-              this.submitting = true;
-              try { localStorage.removeItem(this.draftKey); } catch (err) {}
-          },
+          async onSubmit(e) {
+                // Already confirmed, or time ran out: let the form go through
+                if (this.confirmed || this.expired) {
+                    this.submitting = true;
+                    try { localStorage.removeItem(this.draftKey); } catch (err) {}
+                    return;
+                }
+
+                e.preventDefault();
+
+                const missing = this.total - this.answered;
+                const ok = await window.confirmModal({
+                    title: 'Submit your answers?',
+                    message: missing
+                        ? 'You still have ' + missing + ' unanswered question(s). You cannot retake this exam.'
+                        : 'You answered every question. You cannot retake this exam.',
+                    confirmText: 'Yes, submit',
+                    cancelText: 'Keep working',
+                    tone: missing ? 'warn' : 'info',
+                });
+
+                if (!ok) return;
+
+                this.confirmed = true;
+                this.$root.requestSubmit();
+            },
+
+            async leave(url, note) {
+                const ok = await window.confirmModal({
+                    title: 'Leave this exam?',
+                    message: note,
+                    confirmText: 'Leave exam',
+                    cancelText: 'Stay',
+                    tone: 'warn',
+                });
+
+                if (!ok) return;
+
+                this.submitting = true;
+                window.location.href = url;
+            },
 
           get answered() { return Object.keys(this.answers).length; },
           get pct() { return Math.round(this.answered / this.total * 100); },
@@ -152,7 +182,9 @@
     {{-- Footer --}}
     <div class="flex items-center justify-between gap-3 rounded-2xl border-2 border-[#f6c945] bg-white px-6 py-4 shadow-sm">
         <a href="{{ route('student.exams') }}" class="text-sm font-semibold text-slate-500 hover:text-slate-700"
-           @click="if (!confirm({{ Js::from($remaining !== null ? 'Leave this exam? Your timer keeps running and your answers are saved on this device. You can come back until time runs out.' : 'Leave this exam? Your answers are saved on this device.') }})) $event.preventDefault()">← Leave exam</a>
+            @click.prevent="leave('{{ route('student.exams') }}', {{ Js::from($remaining !== null
+                    ? 'Your timer keeps running and your answers are saved on this device. You can come back until time runs out.'
+                    : 'Your answers are saved on this device.') }})">← Leave exam</a>
         <button type="submit" :disabled="submitting"
                 class="rounded-xl bg-[#7a1230] px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-[#7a1230]/20 transition hover:bg-[#5a0c22] disabled:opacity-60">
             Submit answers

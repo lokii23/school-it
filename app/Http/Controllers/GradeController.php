@@ -588,6 +588,7 @@ class GradeController extends Controller
             ->orderBy('subject')
             ->get()
             ->groupBy('student_id');
+        
 
         return view('grades.report', [
             'students' => $students,

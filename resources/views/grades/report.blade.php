@@ -105,8 +105,8 @@
         @endif
 
         <div class="mt-20 grid grid-cols-2 gap-16 text-center text-sm">
-            <div><div class="border-t border-slate-700 pt-1 font-medium">Class Adviser</div></div>
-            <div><div class="border-t border-slate-700 pt-1 font-medium">Dean / Program Head</div></div>
+            <div><strong>TEACHER NAME</strong><div class="border-t border-slate-700 pt-1 font-medium">Class Adviser</div></div>
+            <div><strong>BENJIE S. POLO</strong><div class="border-t border-slate-700 pt-1 font-medium">Dean / Program Head</div></div>
         </div>
     </div>
 @endforeach
