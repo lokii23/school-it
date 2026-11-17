@@ -16,6 +16,7 @@
         'clock'   => 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
         'profile' => 'M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z',
         'book' => 'M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25',
+        'news' => 'M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z',
         ];
 
     $nav = match ($user->role) {
@@ -26,16 +27,19 @@
             ['Grades', 'grades.index', 'star'], ['My Profile', 'profile.edit', 'profile'],
             ['Subjects', 'subjects.index', 'book'],
             ['Irregular Students', 'irregular.index', 'users'],
+            ['News Feed', 'feed.index', 'news'],
         ],
         'teacher' => [
             ['Dashboard', 'dashboard', 'home'], ['Create Exams', 'exams.index', 'doc'],
             ['Section Management', 'sections.index', 'grid'], ['Grade Management', 'grades.index', 'star'],
             ['Results', 'results.index', 'chart'], ['My Profile', 'profile.edit', 'profile'],
+            ['News Feed', 'feed.index', 'news'],
         ],
         default => [
             ['Dashboard', 'dashboard', 'home'], ['Available Exams', 'student.exams', 'clock'],
             ['Results', 'student.results', 'chart'], ['My Grades', 'student.grades', 'star'],
             ['My Profile', 'profile.edit', 'profile'],
+            ['News Feed', 'feed.index', 'news'],
         ],
     };
 @endphp
@@ -116,18 +120,22 @@
                 </div>
             </div>
 
-            <div x-data="{ open: false }" class="relative">
-                <button @click="open = !open" class="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 hover:bg-slate-100">
-                    <x-avatar :user="$user" size="h-8 w-8" />
-                    <span class="hidden text-sm font-medium sm:block">{{ $user->name }}</span>
-                </button>
-                <div x-show="open" @click.outside="open = false" x-transition style="display:none"
-                     class="absolute right-0 mt-2 w-48 rounded-xl bg-white py-1 shadow-lg ring-1 ring-slate-200">
-                    <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm hover:bg-slate-50">My Profile</a>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button class="block w-full px-4 py-2 text-left text-sm text-[#7a1230] hover:bg-slate-50">Log out</button>
-                    </form>
+            <div class="flex items-center gap-1.5">
+                @include('partials.notification-bell')
+
+                <div x-data="{ open: false }" class="relative">
+                    <button @click="open = !open" class="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 hover:bg-slate-100">
+                        <x-avatar :user="$user" size="h-8 w-8" />
+                        <span class="hidden text-sm font-medium sm:block">{{ $user->name }}</span>
+                    </button>
+                    <div x-show="open" @click.outside="open = false" x-transition style="display:none"
+                        class="absolute right-0 mt-2 w-48 rounded-xl bg-white py-1 shadow-lg ring-1 ring-slate-200">
+                        <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm hover:bg-slate-50">My Profile</a>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button class="block w-full px-4 py-2 text-left text-sm text-[#7a1230] hover:bg-slate-50">Log out</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </header>

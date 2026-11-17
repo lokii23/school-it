@@ -305,6 +305,7 @@ class GradeController extends Controller
             'grades'   => $grades,
             'periods'  => Grading::periods(),
             'passing'  => Grading::passing(),
+            'teacher'  => $this->assignmentFor($section, $subject)?->teacher?->name,
         ]);
     }
 
@@ -366,6 +367,7 @@ class GradeController extends Controller
                 'top'      => $avgs->min(),   // best = lowest number
                 'low'      => $avgs->max(),   // weakest = highest number
             ],
+            'instructors' => $this->instructorsFor(collect([$request->user()]), $grades->groupBy('student_id')),
         ]);
     }
 
@@ -584,19 +586,49 @@ class GradeController extends Controller
 
     private function renderReports($students, string $backUrl)
     {
-        $grades = Grade::whereIn('student_id', $students->pluck('id'))
+        $grades = Grade::with('teacher')
+            ->whereIn('student_id', $students->pluck('id'))
             ->orderBy('subject')
             ->get()
             ->groupBy('student_id');
-        
 
         return view('grades.report', [
-            'students' => $students,
-            'grades'   => $grades,
-            'periods'  => Grading::periods(),
-            'passing'  => Grading::passing(),
-            'backUrl'  => $backUrl,
+            'students'    => $students,
+            'grades'      => $grades,
+            'instructors' => $this->instructorsFor($students, $grades),
+            'periods'     => Grading::periods(),
+            'passing'     => Grading::passing(),
+            'backUrl'     => $backUrl,
         ]);
+    }
+
+    // The teacher currently assigned to each of a student's subjects: [student_id][grade_id] => name
+    private function instructorsFor($students, $grades): array
+    {
+        $subjectIds = Subject::pluck('id', 'name')
+            ->mapWithKeys(fn ($id, $name) => [mb_strtolower($name) => $id]);
+
+        $assigned = SubjectAssignment::with('teacher')->get()
+            ->mapWithKeys(fn ($a) => [$a->subject_id . '|' . $a->section_id => $a->teacher->name ?? null]);
+
+        // For irregular students: which section they take each subject in
+        $enrolled = StudentEnrollment::whereIn('student_id', $students->pluck('id'))->get()
+            ->mapWithKeys(fn ($e) => [$e->student_id . '|' . $e->subject_id => $e->section_id]);
+
+        $out = [];
+
+        foreach ($students as $s) {
+            foreach ($grades->get($s->id, collect()) as $g) {
+                $subId = $subjectIds[mb_strtolower($g->subject)] ?? null;
+                $secId = $s->is_irregular ? ($enrolled[$s->id . '|' . $subId] ?? null) : $s->section_id;
+                $name  = ($subId && $secId) ? ($assigned[$subId . '|' . $secId] ?? null) : null;
+
+                // No current assignment? Fall back to the teacher who last graded it
+                $out[$s->id][$g->id] = $name ?: ($g->teacher->name ?? null);
+            }
+        }
+
+        return $out;
     }
 
     private function statusLabel(?Grade $g): string

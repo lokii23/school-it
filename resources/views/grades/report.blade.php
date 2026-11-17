@@ -1,7 +1,8 @@
 @php
+    $fmt    = fn ($n) => \App\Support\Grading::fmt($n);
     $fmtAvg = fn ($n) => \App\Support\Grading::fmtAvg($n);
     $logo   = asset('images/ccs-logo.png');
-    $labels = ['passed' => 'Passed', 'failed' => 'Failed', 'progress' => 'In progress', 'empty' => '', 'inc' => 'INC',];
+    $labels = ['passed' => 'Passed', 'failed' => 'Failed', 'inc' => 'INC', 'progress' => 'In progress', 'empty' => ''];
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -48,8 +49,8 @@
         <div class="flex items-center gap-4 border-b-2 border-[#0a1f55] pb-4">
             <img src="{{ $logo }}" alt="Logo" class="h-16 w-16 object-contain">
             <div class="flex-1 text-center">
-                <p class="text-base font-extrabold tracking-wide " style="font-family: Old English Text MT; color:#BC0202" >Professional Academy of the Philippines</p>
-                <p class="text-sm font-semibold text-[#BC0202]">College of Computer Studies</p>
+                <p class="text-base font-extrabold tracking-wide text-[#0a1f55]">PROFESSIONAL ACADEMY OF THE PHILIPPINES</p>
+                <p class="text-sm font-semibold text-[#7a1230]">College of Computer Studies</p>
                 <p class="mt-1 text-sm font-bold uppercase tracking-widest">Report of Grades</p>
             </div>
             <div class="w-16"></div>
@@ -57,7 +58,7 @@
 
         <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
             <p><span class="text-slate-500">Student:</span> <strong>{{ $s->list_name }}</strong></p>
-            <p class="text-right"><span class="text-slate-500">Section:</span> <strong>{{ $s->is_irregular ? 'Irregular' : ($s->section->name ?? '—') }}</strong>
+            <p class="text-right"><span class="text-slate-500">Section:</span> <strong>{{ $s->is_irregular ? 'Irregular' : ($s->section->name ?? '—') }}</strong></p>
             <p><span class="text-slate-500">Student ID:</span> {{ $s->student_number ?? '—' }}</p>
             <p class="text-right"><span class="text-slate-500">Date:</span> {{ now()->format('M d, Y') }}</p>
         </div>
@@ -69,6 +70,7 @@
                 <thead>
                     <tr>
                         <th class="text-left">Subject</th>
+                        <th class="text-left">Instructor</th>
                         @foreach ($periods as $label) <th class="text-center">{{ $label }}</th> @endforeach
                         <th class="text-center">Avg.</th>
                         <th class="text-left">Status</th>
@@ -81,15 +83,16 @@
                                 {{ $g->subject }}
                                 @if ($g->display_remarks) <div class="text-[10px] font-normal text-slate-500">{{ $g->display_remarks }}</div> @endif
                             </td>
+                            <td>{{ $instructors[$s->id][$g->id] ?? '—' }}</td>
                             @foreach ($periods as $key => $label)
-                                <td class="text-center tabular-nums">{{ $g->isInc($key) ? 'INC' : $fmtAvg($g->{$key}) }}</td>
+                                <td class="text-center tabular-nums">{{ $g->isInc($key) ? 'INC' : $fmt($g->{$key}) }}</td>
                             @endforeach
                             <td class="text-center font-bold tabular-nums">{{ $g->has_inc ? 'INC' : $fmtAvg($g->average) }}</td>
                             <td>{{ $labels[$g->status] }}</td>
                         </tr>
                     @endforeach
                     <tr class="bg-slate-50 font-bold">
-                        <td colspan="{{ count($periods) + 1 }}" class="text-right">General average</td>
+                        <td colspan="{{ count($periods) + 2 }}" class="text-right">General average</td>
                         <td class="text-center tabular-nums">{{ $fmtAvg($general) }}</td>
                         <td>{{ $general === null ? '' : (\App\Support\Grading::passes($general) ? 'Passed' : 'Below passing') }}</td>
                     </tr>
@@ -97,16 +100,34 @@
             </table>
 
             <p class="mt-3 text-[11px] text-slate-500">
-                Grading: 1.00 is the highest. 3.00 is the lowest passing grade. 3.01 to 4.00 is failed.
+                Grading: 1.00 is the highest. 3.00 is the lowest passing grade. 3.01 to 4.00 is failed. INC = Incomplete (not counted in the general average).
                 @if ($list->contains(fn ($g) => ! $g->locked))
                     <span class="font-semibold text-[#7a1230]">Unofficial copy: includes grades that are not yet finalized.</span>
                 @endif
             </p>
         @endif
 
-        <div class="mt-20 grid grid-cols-2 gap-16 text-center text-sm">
-            <div><strong>TEACHER NAME</strong><div class="border-t border-slate-700 pt-1 font-medium">Class Adviser</div></div>
-            <div><strong>BENJIE S. POLO</strong><div class="border-t border-slate-700 pt-1 font-medium">Dean / Program Head</div></div>
+        @php
+        // The teachers assigned to this student's subjects (each name once)
+        $names = $list->map(fn ($g) => $instructors[$s->id][$g->id] ?? null)->filter()->unique()->values();
+        @endphp
+
+        <div class="mt-20 grid grid-cols-2 items-end gap-16 text-center text-sm">
+            <div>
+                <div class="mb-1 min-h-[1.25rem] space-y-0.5 font-bold uppercase tracking-wide text-[#0a1f55]">
+                    @forelse ($names as $n)
+                        <p>{{ $n }}</p>
+                    @empty
+                        <p>&nbsp;</p>
+                    @endforelse
+                </div>
+                <div class="border-t border-slate-700 pt-1 font-medium">Subject Teacher</div>
+            </div>
+
+            <div>
+                <div class="mb-1 min-h-[1.25rem] space-y-0.5 font-bold uppercase tracking-wide text-[#0a1f55]">BENJIE S. POLO </div>
+                <div class="border-t border-slate-700 pt-1 font-medium">OIC/Dean</div>
+            </div>
         </div>
     </div>
 @endforeach

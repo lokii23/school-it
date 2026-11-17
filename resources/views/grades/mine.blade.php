@@ -93,7 +93,7 @@
                             <tr class="transition hover:bg-[#fbf8f1]">
                                 <td class="min-w-[180px] px-5 py-4">
                                     <p class="font-semibold text-[#0a1f55]">{{ $g->subject }}</p>
-                                    <p class="text-xs text-slate-400">{{ $g->teacher->name ?? '—' }} · {{ $g->locked ? '🔒 Finalized' : 'Preliminary' }}</p>
+                                    <p class="text-xs text-slate-400">{{ $instructors[auth()->id()][$g->id] ?? '—' }} · {{ $g->locked ? '🔒 Finalized' : 'Preliminary' }}</p>
                                 </td>
                                 @foreach ($periods as $key => $label)
                                     <td class="px-3 py-4 text-center font-medium tabular-nums {{ $g->isInc($key) ? 'font-bold text-[#0a1f55]' : 'text-slate-700' }}">{{ $g->isInc($key) ? 'INC' : $fmtAvg($g->{$key}) }}</td>

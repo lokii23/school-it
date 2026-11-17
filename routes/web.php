@@ -13,6 +13,8 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\IrregularController;
+use App\Http\Controllers\FeedController;
+use App\Http\Controllers\FeedNotificationController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -21,12 +23,39 @@ Route::get('/', function () {
 Route::middleware('auth')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    
 
     // ---------- My Profile (all roles) ----------
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::post('/profile/photo', [ProfilePhotoController::class, 'update'])->name('profile.photo.update');
     Route::delete('/profile/photo', [ProfilePhotoController::class, 'destroy'])->name('profile.photo.destroy');
+
+    // ---------- News Feed (all roles) ----------
+    Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
+    Route::get('feed/{post}/reactions', [FeedController::class, 'reactions'])->whereNumber('post')->name('feed.reactions');
+    Route::get('feed/{post}/comments', [FeedController::class, 'comments'])->whereNumber('post')->name('feed.comments');
+    
+
+    Route::post('feed', [FeedController::class, 'store'])->middleware('throttle:10,1')->name('feed.store');
+    Route::get('feed/people', [FeedController::class, 'people'])->middleware('throttle:90,1')->name('feed.people');
+
+// Notifications
+Route::get('notifications', [FeedNotificationController::class, 'index'])->name('notifications.index');
+Route::get('notifications/count', [FeedNotificationController::class, 'count'])->name('notifications.count');
+Route::post('notifications/read-all', [FeedNotificationController::class, 'readAll'])->name('notifications.readAll');
+Route::post('notifications/{notification}/read', [FeedNotificationController::class, 'read'])->whereNumber('notification')->name('notifications.read');
+
+    Route::middleware('throttle:120,1')->group(function () {
+        Route::patch('feed/{post}', [FeedController::class, 'update'])->whereNumber('post')->name('feed.update');
+        Route::delete('feed/{post}', [FeedController::class, 'destroy'])->whereNumber('post')->name('feed.destroy');
+        Route::post('feed/{post}/react', [FeedController::class, 'react'])->whereNumber('post')->name('feed.react');
+        Route::post('feed/{post}/comments', [FeedController::class, 'commentStore'])->whereNumber('post')->name('feed.comments.store');
+        Route::delete('feed/comments/{comment}', [FeedController::class, 'commentDestroy'])->whereNumber('comment')->name('feed.comments.destroy');
+        
+    });
+
+    Route::post('feed/{post}/pin', [FeedController::class, 'pin'])->whereNumber('post')->middleware('role:admin')->name('feed.pin');
 
     // ---------- Admin only ----------
     Route::middleware('role:admin')->group(function () {
