@@ -9,6 +9,24 @@
     $same     = fn ($a, $b) => mb_strtolower((string) $a) === mb_strtolower((string) $b);
 @endphp
 
+
+{{-- Year level: pick this first --}}
+<div class="mb-5 flex flex-wrap items-center gap-2">
+    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Year level</span>
+
+    <a href="{{ route('grades.index') }}"
+       class="rounded-full px-4 py-1.5 text-sm font-semibold transition {{ ! $year ? 'bg-[#0a1f55] text-white shadow' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50' }}">
+        All years
+    </a>
+
+    @foreach ($years as $n => $label)
+        <a href="{{ route('grades.index', ['year' => $n]) }}"
+           class="rounded-full px-4 py-1.5 text-sm font-semibold transition {{ $year === $n ? 'bg-[#0a1f55] text-white shadow' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50' }}">
+            {{ $label }}
+            <span class="ml-1 rounded-full px-1.5 text-xs {{ $year === $n ? 'bg-[#f6c945] text-[#0a1f55]' : 'bg-slate-100 text-slate-500' }}">{{ $yearCounts[$n] ?? 0 }}</span>
+        </a>
+    @endforeach
+</div>
 {{-- ====================================================================
      STEP 1: choose a section
      ==================================================================== --}}
@@ -60,6 +78,7 @@
                         </div>
 
                         <h3 class="mt-4 text-xl font-bold text-[#0a1f55]">{{ $c['section']->name }}</h3>
+                        <p class="mt-0.5 text-xs font-semibold text-[#7a1230]">{{ \App\Support\Grading::yearLabel($c['section']->year_level) }}</p>
 
                         <p class="mt-1 text-sm text-slate-500">
                             @if ($c['subjects'] > 0)
@@ -92,7 +111,7 @@
         <div>
             <div class="mb-2 flex items-center justify-between">
                 <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Section</p>
-                <a href="{{ route('grades.index') }}" class="text-xs font-semibold text-[#7a1230] hover:underline">All sections</a>
+                <a href="{{ route('grades.index', array_filter(['year' => $year])) }}" class="text-xs font-semibold text-[#7a1230] hover:underline">All sections</a>
             </div>
             <div class="flex flex-wrap gap-2">
                 @foreach ($sections as $s)
@@ -230,6 +249,7 @@
                 best: {{ $best }},
                 worst: {{ $worst }},
                 dec: {{ $decimals }},
+                gdec: {{ $gradeDecimals }},
                 hadErrors: {{ $errors->any() ? 'true' : 'false' }},
                 exam: '', period: '', onlyEmpty: true, importMsg: '', formMsg: '',
                 manual: {},
@@ -262,7 +282,8 @@
                 bad(v) {
                     const s = String(v === null || v === undefined ? '' : v).trim();
                     if (s === '' || this.isInc(s)) return false;
-                    if (!/^\d+(\.\d{1,2})?$/.test(s)) return true;
+                    if (!/^\d+(\.\d+)?$/.test(s)) return true;
+                    if ((s.split('.')[1] || '').length > this.gdec) return true;
                     const n = parseFloat(s);
                     return n < this.best || n > this.worst;
                 },
@@ -271,7 +292,12 @@
                     if (this.isInc(v)) return 'ring-1 ring-[#0a1f55]/40 bg-[#0a1f55]/10 text-[#0a1f55] font-bold';
                     return 'ring-1 ring-slate-200';
                 },
-                norm(id, k) { if (this.isInc(this.rows[id][k])) this.rows[id][k] = 'INC'; },
+                norm(id, k) {
+                    const v = this.rows[id][k];
+                    if (this.isInc(v)) { this.rows[id][k] = 'INC'; return; }
+                    const s = String(v === null || v === undefined ? '' : v).trim();
+                    if (s !== '' && !this.bad(s)) this.rows[id][k] = parseFloat(s).toFixed(this.gdec);
+                },
 
                 status(r) {
                     if (this.hasInc(r)) return 'inc';
@@ -343,7 +369,7 @@
                     const invalid = Object.keys(this.rows).some(id => this.editable[id] && this.keys.some(k => this.bad(this.rows[id][k])));
                     if (invalid) {
                         e.preventDefault();
-                        this.formMsg = 'Some grades are not valid. Use ' + this.best.toFixed(2) + ' to ' + this.worst.toFixed(2) + ' or INC.';
+                        this.formMsg = 'Some grades are not valid. Use ' + this.best.toFixed(this.gdec) + ' to ' + this.worst.toFixed(this.gdec) + ' (one decimal) or INC.';
                         return;
                     }
                     this.formMsg = '';
@@ -360,7 +386,7 @@
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-wider text-[#f6c945]">Grade table</p>
                         <h2 class="mt-1 text-2xl font-bold">{{ $subject }}</h2>
-                        <p class="text-slate-300">{{ $section->name }} · {{ $students->count() }} {{ Str::plural('student', $students->count()) }}@if ($teacherName) · Teacher: {{ $teacherName }}@endif</p>
+                        <p class="text-slate-300">{{ $section->name }}@if ($section->year_level) · {{ \App\Support\Grading::yearLabel($section->year_level) }}@endif · {{ $students->count() }} {{ Str::plural('student', $students->count()) }}@if ($teacherName) · Teacher: {{ $teacherName }}@endif</p>
 
                         <div class="mt-3 flex flex-wrap gap-2 text-xs">
                             <span class="rounded-full bg-white/10 px-3 py-1">{{ $fmt($best) }} highest · {{ $fmt($passing) }} lowest passing · {{ $fmt($worst) }} last grade</span>
@@ -475,7 +501,7 @@
                         <div class="flex flex-wrap gap-2">
                             <span class="rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">{{ $fmt($best) }} = highest</span>
                             <span class="rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">{{ $fmt($best) }} to {{ $fmt($passing) }} = Passed</span>
-                            <span class="rounded-full bg-[#7a1230]/10 px-3 py-1 font-medium text-[#7a1230]">{{ number_format($passing + 0.01, 2) }} to {{ $fmt($worst) }} = Failed</span>
+                            <span class="rounded-full bg-[#7a1230]/10 px-3 py-1 font-medium text-[#7a1230]">{{ number_format($passing + 0.1, 1) }} to {{ $fmt($worst) }} = Failed</span>
                             <span class="rounded-full bg-[#7a1230]/10 px-3 py-1 font-medium text-[#7a1230]">{{ $fmt($worst) }} = last grade</span>
                         </div>
 
@@ -572,7 +598,7 @@
 
                                             @foreach ($periods as $key => $label)
                                                 <td class="px-2 py-2 text-center">
-                                                    <input type="text" inputmode="decimal" maxlength="4" autocomplete="off"
+                                                    <input type="text" inputmode="decimal" maxlength="{{ strlen(\App\Support\Grading::fmt($worst)) }}" autocomplete="off"
                                                            name="rows[{{ $sid }}][{{ $key }}]"
                                                            x-model="rows[{{ $sid }}].{{ $key }}"
                                                            data-col="{{ $key }}"

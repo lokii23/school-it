@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', 'Exam Result')
+@section('live', '10')
 
 @section('content')
 <div class="mx-auto max-w-xl"

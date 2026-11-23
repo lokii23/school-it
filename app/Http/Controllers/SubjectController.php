@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use App\Support\Grading;
 
 class SubjectController extends Controller
 {
@@ -22,6 +23,7 @@ class SubjectController extends Controller
                 ->where('name', 'like', "%{$s}%")
                 ->orWhere('code', 'like', "%{$s}%")))
             ->when($request->teacher_id, fn ($q, $t) => $q->whereHas('assignments', fn ($a) => $a->where('teacher_id', $t)))
+            ->when($request->year, fn ($q, $y) => $q->where('year_level', (int) $y))
             ->orderBy('name')
             ->paginate(8)
             ->withQueryString();
@@ -38,14 +40,19 @@ class SubjectController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-            'code' => ['nullable', 'string', 'max:30'],
+            'name'       => ['required', 'string', 'max:100'],
+            'code'       => ['nullable', 'string', 'max:30'],
+            'year_level' => ['nullable', Rule::in(array_keys(Grading::yearLevels()))],
         ]);
 
         $name = $this->clean($data['name']);
         $this->ensureUnique($name);
 
-        Subject::create(['name' => $name, 'code' => $this->clean($data['code'] ?? '') ?: null]);
+        Subject::create([
+            'name'       => $name,
+            'code'       => $this->clean($data['code'] ?? '') ?: null,
+            'year_level' => $data['year_level'] ?? null,
+        ]);
 
         return redirect()->route('subjects.index')->with('success', 'Subject created. Now assign a teacher to it.');
     }
@@ -54,8 +61,9 @@ class SubjectController extends Controller
     public function update(Request $request, Subject $subject)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-            'code' => ['nullable', 'string', 'max:30'],
+            'name'       => ['required', 'string', 'max:100'],
+            'code'       => ['nullable', 'string', 'max:30'],
+            'year_level' => ['nullable', Rule::in(array_keys(Grading::yearLevels()))],
         ]);
 
         $name = $this->clean($data['name']);
@@ -64,7 +72,11 @@ class SubjectController extends Controller
         DB::transaction(function () use ($subject, $name, $data) {
             $old = $subject->name;
 
-            $subject->update(['name' => $name, 'code' => $this->clean($data['code'] ?? '') ?: null]);
+            $subject->update([
+                'name'       => $name,
+                'code'       => $this->clean($data['code'] ?? '') ?: null,
+                'year_level' => $data['year_level'] ?? null,
+            ]);
 
             if ($old !== $name) {
                 foreach ([Grade::class, Exam::class] as $model) {

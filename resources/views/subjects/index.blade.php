@@ -1,13 +1,14 @@
 @extends('layouts.portal')
 
 @section('title', 'Subjects')
+@section('live', '15')
 
 @section('content')
 @php
     $inputBase  = 'w-full rounded-xl border-0 bg-white px-4 py-3 text-slate-900 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-[#0a1f55]';
     $selectBase = 'rounded-xl border-0 bg-white py-2.5 pl-4 pr-9 text-sm shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0a1f55]';
     $allIds     = $sections->pluck('id')->map(fn ($i) => (string) $i)->values();
-    $filtered   = request()->hasAny(['q', 'teacher_id']);
+    $filtered   = request()->hasAny(['q', 'teacher_id', 'year']);
 @endphp
 
 <div x-data="{
@@ -22,9 +23,9 @@
         current: {},
         teacher: {{ Js::from((string) old('teacher_id', '')) }},
         picked: {{ Js::from(array_map('strval', (array) old('section_ids', []))) }},
-
-        newSubject() { this.subjectOpen = true; this.editId = null; this.name = ''; this.code = ''; },
-        editSubject(s) { this.subjectOpen = true; this.editId = s.id; this.name = s.name; this.code = s.code || ''; },
+        year: {{ Js::from((string) old('year_level', '')) }},
+        newSubject() { this.subjectOpen = true; this.editId = null; this.name = ''; this.code = ''; this.year = ''; },
+        editSubject(s) { this.subjectOpen = true; this.editId = s.id; this.name = s.name; this.code = s.code || ''; this.year = s.year || ''; },
         openAssign(s) { this.assignOpen = true; this.aId = s.id; this.aName = s.name; this.current = s.current; this.teacher = ''; this.picked = []; },
      }">
 
@@ -86,11 +87,11 @@
                     <div class="flex items-start justify-between gap-3 border-b-2 border-[#f6c945] bg-[#0a1f55] px-6 py-4 text-white">
                         <div class="min-w-0">
                             <h3 class="truncate text-lg font-semibold">{{ $sub->name }}</h3>
-                            <p class="text-xs text-slate-300">{{ $sub->code ?: 'No code' }} · {{ $rows->count() }} {{ Str::plural('section', $rows->count()) }}</p>
+                            <p class="text-xs text-slate-300">{{ $sub->year_level ? \App\Support\Grading::yearLabel($sub->year_level) . ' · ' : '' }}{{ $sub->code ?: 'No code' }} · {{ $rows->count() }} {{ Str::plural('section', $rows->count()) }}</p>
                         </div>
                         <div class="flex shrink-0 gap-2 text-xs font-semibold">
                             <button type="button"
-                                    @click="editSubject({{ Js::from(['id' => $sub->id, 'name' => $sub->name, 'code' => $sub->code]) }})"
+                                    @click="editSubject({{ Js::from(['id' => $sub->id, 'name' => $sub->name, 'code' => $sub->code, 'year' => (string) $sub->year_level]) }})"
                                     class="rounded-lg bg-white/10 px-3 py-1.5 transition hover:bg-[#f6c945] hover:text-[#0a1f55]">Edit</button>
                             <form method="POST" action="{{ route('subjects.destroy', $sub) }}"
                                   onsubmit="return confirm('Delete the subject {{ addslashes($sub->name) }}?')">
@@ -139,6 +140,17 @@
         <div class="mt-6">{{ $subjects->links() }}</div>
     @endif
 
+
+    <div>
+        <label class="mb-1.5 block text-sm font-medium text-slate-700">Year level</label>
+        <select name="year" onchange="this.form.submit()" class="{{ $selectBase }}">
+            <option value="">All year levels</option>
+            @foreach (\App\Support\Grading::yearLevels() as $n => $label)
+                <option value="{{ $n }}" @selected((string) request('year') === (string) $n)>{{ $label }}</option>
+            @endforeach
+        </select>
+        @error('year_level') <p class="mt-1.5 text-sm text-[#7a1230]">{{ $message }}</p> @enderror
+    </div>
     {{-- ============ MODAL: create / edit subject ============ --}}
     <div x-show="subjectOpen" x-transition.opacity style="display:none"
          class="fixed inset-0 z-50 flex items-center justify-center bg-[#071640]/70 p-4" @keydown.escape.window="subjectOpen = false">

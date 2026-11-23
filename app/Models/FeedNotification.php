@@ -14,38 +14,35 @@ class FeedNotification extends Model
     public function post()  { return $this->belongsTo(Post::class); }
 
     // A new notification. You are never notified about your own actions.
-public static function sendNotification(
-    int $to,
-    int $actor,
-    string $type,
-    int $postId,
-    ?int $commentId = null
-): void {
-    if ($to === $actor) {
-        return;
+    public static function sendNotification(int $to, int $actor, string $type, int $postId, ?int $commentId = null): void
+    {
+        if ($to === $actor) {
+            return;
+        }
+
+        static::create([
+            'user_id' => $to, 'actor_id' => $actor, 'type' => $type,
+            'post_id' => $postId, 'comment_id' => $commentId,
+        ]);
     }
 
-    static::create([
-        'user_id' => $to,
-        'actor_id' => $actor,
-        'type' => $type,
-        'post_id' => $postId,
-        'comment_id' => $commentId,
-    ]);
-}
-
-    // One notification per person per post. Changing your reaction updates it instead of adding another.
+    // One reaction notification per person per post. Changing the reaction replaces it with a fresh one.
     public static function reaction(Post $post, int $actor, string $reaction): void
     {
         if ($post->user_id === $actor) {
             return;
         }
 
-        $n = static::firstOrNew([
-            'user_id' => $post->user_id, 'actor_id' => $actor, 'post_id' => $post->id, 'type' => 'reaction',
-        ]);
+        $where    = ['user_id' => $post->user_id, 'actor_id' => $actor, 'post_id' => $post->id, 'type' => 'reaction'];
+        $existing = static::where($where)->first();
 
-        $n->data = ['reaction' => $reaction];
-        $n->save();
+        // Same reaction again: nothing new to say
+        if ($existing && ($existing->data['reaction'] ?? null) === $reaction) {
+            return;
+        }
+
+        $existing?->delete();
+
+        static::create($where + ['data' => ['reaction' => $reaction]]);
     }
 }

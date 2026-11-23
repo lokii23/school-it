@@ -9,6 +9,7 @@ class Grading
     public static function worst(): float    { return (float) config('grading.worst'); }
     public static function passing(): float  { return (float) config('grading.passing'); }
     public static function decimals(): int   { return (int) config('grading.decimals', 1); }
+    public static function gradeDecimals(): int { return (int) config('grading.grade_decimals', 1); }
 
     // Mean of the periods that have a grade (null if none)
     public static function average(array $values): ?float
@@ -24,7 +25,7 @@ class Grading
         return $nums ? round(array_sum($nums) / count($nums), self::decimals()) : null;
     }
 
-    // Lower is better: 3.00 or lower passes
+    // Lower is better: 3.0 or lower passes
     public static function passes(?float $average): bool
     {
         return $average !== null && $average <= self::passing() + 0.000001;
@@ -73,21 +74,21 @@ class Grading
     {
         foreach (config('grading.transmute') as [$min, $grade]) {
             if ($percent >= $min) {
-                return (float) $grade;
+                return round((float) $grade, self::gradeDecimals());
             }
         }
 
         return self::worst();
     }
 
-    // A single grade: always two decimals (1.25, 2.00, 3.00)
+    // A single grade: one decimal (1.5, 2.0, 3.0)
     public static function fmt($n): string
     {
         if ($n === null || $n === '') {
             return '—';
         }
 
-        return number_format((float) $n, 2, '.', '');
+        return number_format((float) $n, self::gradeDecimals(), '.', '');
     }
 
     // An average: one decimal (1.9, 2.5, 3.0)
@@ -98,5 +99,29 @@ class Grading
         }
 
         return number_format((float) $n, self::decimals(), '.', '');
+    }
+
+    // [1 => '1st Year', 2 => '2nd Year', ...]
+    public static function yearLevels(): array
+    {
+        $out = [];
+
+        for ($i = 1, $n = max(1, (int) config('grading.year_levels', 4)); $i <= $n; $i++) {
+            $out[$i] = self::yearLabel($i);
+        }
+
+        return $out;
+    }
+
+    public static function yearLabel(?int $n): string
+    {
+        if ($n === null) return 'No year level';
+        if ($n === 0)    return 'Other subjects';
+
+        $suffix = ($n % 100 >= 11 && $n % 100 <= 13)
+            ? 'th'
+            : match ($n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th' };
+
+        return $n . $suffix . ' Year';
     }
 }

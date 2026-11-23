@@ -615,4 +615,6 @@ window.feedPeopleUrl = {{ Js::from(route('feed.people')) }};
         </aside>
     </div>
 </div>
+
+@include('feed._live')
 @endsection

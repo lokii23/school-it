@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', 'My Results')
+@section('live', '8')
 
 @section('content')
 <div class="space-y-6">

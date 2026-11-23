@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', 'Section Management')
+@section('live', '15')
 
 @section('content')
 @php
@@ -16,8 +17,9 @@
         open: {{ $isAdmin && $errors->any() ? 'true' : 'false' }},
         editId: {{ Js::from(old('_edit_id')) }},
         name: {{ Js::from(old('name', '')) }},
-        create() { this.open = true; this.editId = null; this.name = ''; },
-        rename(id, n) { this.open = true; this.editId = id; this.name = n; },
+        year: {{ Js::from((string) old('year_level', '')) }},
+        create() { this.open = true; this.editId = null; this.name = ''; this.year = ''; },
+        rename(id, n, y) { this.open = true; this.editId = id; this.name = n; this.year = y || ''; },
         match(n) { return !this.q || n.includes(this.q.toLowerCase()); },
     }"
 >
@@ -110,7 +112,12 @@
             <div class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70">
                 <div class="flex items-start justify-between border-b-2 border-[#f6c945] bg-[#0a1f55] px-6 py-4 text-white">
                     <div>
-                        <h2 class="text-lg font-semibold">{{ $section->name }}</h2>
+                        <h2 class="text-lg font-semibold">
+                            {{ $section->name }}
+                            @if ($section->year_level)
+                                <span class="ml-2 rounded-full bg-[#f6c945] px-2.5 py-0.5 align-middle text-[10px] font-bold uppercase text-[#0a1f55]">{{ \App\Support\Grading::yearLabel($section->year_level) }}</span>
+                            @endif
+                        </h2>
                         <p class="text-xs text-slate-300">
                             {{ $section->students_count }} {{ Str::plural('student', $section->students_count) }}
                             · {{ $examCounts[$section->id] ?? 0 }} {{ Str::plural('exam', $examCounts[$section->id] ?? 0) }}
@@ -119,7 +126,7 @@
 
                     @if ($isAdmin)
                         <div class="flex gap-2">
-                            <button type="button" @click="rename({{ $section->id }}, {{ Js::from($section->name) }})"
+                            <button type="button" @click="rename({{ $section->id }}, {{ Js::from($section->name) }}, {{ Js::from((string) $section->year_level) }})"
                                     class="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-[#f6c945] hover:text-[#0a1f55]">Rename</button>
                             <form method="POST" action="{{ route('sections.destroy', $section) }}"
                                   onsubmit="return confirm('Delete section {{ addslashes($section->name) }}?')">

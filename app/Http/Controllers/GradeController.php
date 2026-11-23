@@ -26,12 +26,25 @@ class GradeController extends Controller
     {
         $user    = $request->user();
         $isAdmin = $user->role === 'admin';
+        $years   = Grading::yearLevels();
 
-        $sections = $this->visibleSections($user);
-        $section  = $sections->firstWhere('id', (int) $request->section_id);
+        $visible = $this->visibleSections($user);
+        $section = $visible->firstWhere('id', (int) $request->section_id);
 
         // A teacher who opens a section they don't teach is turned away
         abort_if($request->filled('section_id') && ! $section, 403);
+
+        // Year level: the one picked on the page, otherwise the year of the open section
+        $year = (int) $request->query('year');
+        $year = isset($years[$year])
+            ? $year
+            : (($section && isset($years[(int) $section->year_level])) ? (int) $section->year_level : null);
+
+        $sections = $year ? $visible->where('year_level', $year)->values() : $visible;
+
+        if ($section && ! $sections->contains('id', $section->id)) {
+            $sections = $sections->push($section)->sortBy('name')->values();
+        }
 
         $subject = null;
         if ($section && $request->filled('subject')) {
@@ -55,12 +68,16 @@ class GradeController extends Controller
             'section'      => $section,
             'subject'      => $subject,
             'counts'       => $counts,
+            'years'        => $years,
+            'year'         => $year,
+            'yearCounts'   => $visible->groupBy(fn ($s) => (int) $s->year_level)->map->count(),
             'allSubjects'  => $isAdmin ? Subject::orderBy('name')->pluck('name') : collect(),
             'periods'      => Grading::periods(),
             'passing'      => Grading::passing(),
             'best'         => Grading::best(),
             'worst'        => Grading::worst(),
             'decimals'     => Grading::decimals(),
+            'gradeDecimals' => Grading::gradeDecimals(),
             'transmute'    => config('grading.transmute'),
             'remarkScale'  => config('grading.remarks'),
             'failedRemark' => config('grading.failed_remark', 'Failed'),
@@ -99,7 +116,7 @@ class GradeController extends Controller
             'rows.*.remarks' => ['nullable', 'string', 'max:255'],
         ];
 
-        $message = 'Grades must be ' . Grading::fmt($best) . ' (highest) to ' . Grading::fmt($worst) . ' (lowest), or INC.';
+        $message = 'Grades must be ' . Grading::fmt($best) . ' (highest) to ' . Grading::fmt($worst) . ' (lowest), or INC, with one decimal at most.';
 
         // A grade is a number from best to worst, or INC
         foreach ($keys as $k) {
@@ -115,7 +132,7 @@ class GradeController extends Controller
                     return;
                 }
 
-                if (! preg_match('/^\d+(\.\d{1,2})?$/', $v) || (float) $v < $best || (float) $v > $worst) {
+                if (! preg_match('/^\d+(\.\d{1,' . Grading::gradeDecimals() . '})?$/', $v) || (float) $v < $best || (float) $v > $worst) {
                     $fail($message);
                 }
             }];
@@ -171,7 +188,7 @@ class GradeController extends Controller
                         $values[$k] = null;
                         $incKeys[]  = $k;
                     } else {
-                        $values[$k] = round((float) $v, 2);
+                        $values[$k] = round((float) $v, Grading::gradeDecimals());
                     }
                 }
 
@@ -321,7 +338,7 @@ class GradeController extends Controller
             403
         );
 
-        return $this->renderReports(collect([$student]), route('grades.index'));
+        return $this->renderReports(collect([$student]), route('grades.index'), $this->yearParam($request));
     }
 
     // Printable report cards for a whole section (one per page)
@@ -333,47 +350,82 @@ class GradeController extends Controller
         $students = $this->sectionRoster($section);
         abort_if($students->isEmpty(), 404);
 
-        return $this->renderReports($students, route('grades.index', ['section_id' => $section->id]));
+        return $this->renderReports($students, route('grades.index', ['section_id' => $section->id]), $this->yearParam($request));
     }
 
     // ===================== Student =====================
 
     public function mine(Request $request)
     {
-        $grades = Grade::with('teacher')
-            ->where('student_id', $request->user()->id)
-            ->orderBy('subject')
-            ->get();
+        $me     = $request->user();
+        $years  = Grading::yearLevels();
+        $grades = Grade::with('teacher')->where('student_id', $me->id)->orderBy('subject')->get();
+        $yearOf = $this->subjectYears();
 
-        // Subjects with an INC have no average yet, so they are left out
-        $avgs    = $grades->map(fn ($g) => $g->average)->filter(fn ($a) => $a !== null);
-        $general = $avgs->isNotEmpty() ? round($avgs->avg(), Grading::decimals()) : null;
+        $byYear = $grades->groupBy(fn ($g) => (int) ($yearOf[mb_strtolower($g->subject)] ?? 0));
+        $range  = max(0.01, Grading::worst() - Grading::best());
 
-        // Ring fill: 1.00 is a full ring, 4.00 is an empty one
-        $range = max(0.01, Grading::worst() - Grading::best());
-        $ring  = $general === null ? 0 : max(0, min(100, (int) round((Grading::worst() - $general) / $range * 100)));
+        // The numbers for one tab
+        $build = function (string $label, Collection $list) use ($range) {
+            $avgs    = $list->map(fn ($g) => $g->average)->filter(fn ($a) => $a !== null);
+            $general = $avgs->isNotEmpty() ? round($avgs->avg(), Grading::decimals()) : null;
+            $fill    = $general === null ? 0 : max(0, min(1, (Grading::worst() - $general) / $range));   // 1.00 = full ring
 
-        return view('grades.mine', [
-            'grades'   => $grades,
-            'periods'  => Grading::periods(),
-            'passing'  => Grading::passing(),
-            'general'  => $general,
-            'ring'     => $ring,
-            'allFinal' => $grades->isNotEmpty() && $grades->every(fn ($g) => $g->complete),
-            'stats'    => [
-                'count'    => $grades->count(),
-                'complete' => $grades->filter(fn ($g) => $g->complete)->count(),
-                'passed'   => $grades->filter(fn ($g) => $g->status === 'passed')->count(),
+            return [
+                'label'    => $label,
+                'grades'   => $list->values(),
+                'count'    => $list->count(),
+                'general'  => $general,
+                'offset'   => round(339.3 * (1 - $fill), 1),
+                'allFinal' => $list->isNotEmpty() && $list->every(fn ($g) => $g->complete),
+                'complete' => $list->filter(fn ($g) => $g->complete)->count(),
+                'passed'   => $list->filter(fn ($g) => $g->status === 'passed')->count(),
+                'inc'      => $list->filter(fn ($g) => $g->status === 'inc')->count(),
                 'top'      => $avgs->min(),   // best = lowest number
                 'low'      => $avgs->max(),   // weakest = highest number
-            ],
-            'instructors' => $this->instructorsFor(collect([$request->user()]), $grades->groupBy('student_id')),
+            ];
+        };
+
+        $tabs = ['all' => $build('All years', $grades)];
+
+        $keys = collect(array_keys($years))
+            ->merge($byYear->keys()->filter(fn ($k) => $k > 0))
+            ->unique()->sort()->values();
+
+        foreach ($keys as $n) {
+            $tabs[(string) $n] = $build(Grading::yearLabel((int) $n), $byYear->get($n, collect()));
+        }
+
+        if ($byYear->has(0)) {
+            $tabs['0'] = $build('Other subjects', $byYear->get(0));
+        }
+
+        // Open on the year asked for, otherwise the student's current year, otherwise all
+        $current = (! $me->is_irregular && $me->section) ? (int) $me->section->year_level : null;
+        $asked   = $request->query('year');
+        $active  = ($asked !== null && isset($tabs[(string) $asked])) ? (string) $asked : null;
+
+        if ($active === null) {
+            $active = ($current && isset($tabs[(string) $current]) && $tabs[(string) $current]['count'] > 0)
+                ? (string) $current
+                : 'all';
+        }
+
+        return view('grades.mine', [
+            'tabs'        => $tabs,
+            'active'      => $active,
+            'current'     => $current,
+            'yearOf'      => $yearOf,
+            'periods'     => Grading::periods(),
+            'passing'     => Grading::passing(),
+            'instructors' => $this->instructorsFor(collect([$me]), $grades->groupBy('student_id')),
         ]);
     }
 
+
     public function reportMine(Request $request)
     {
-        return $this->renderReports(collect([$request->user()]), route('student.grades'));
+        return $this->renderReports(collect([$request->user()]), route('student.grades'), $this->yearParam($request));
     }
 
     // ===================== access rules =====================
@@ -496,7 +548,7 @@ class GradeController extends Controller
 
             $row = [];
             foreach ($keys as $k) {
-                $saved   = $g ? ($g->isInc($k) ? 'INC' : ($g->{$k} ?? '')) : '';
+                $saved   = $g ? ($g->isInc($k) ? 'INC' : ($g->{$k} !== null ? Grading::fmt($g->{$k}) : '')) : '';
                 $row[$k] = $old[$k] ?? $saved;
             }
             $row['remarks'] = $old['remarks'] ?? ($g?->remarks ?? '');
@@ -584,13 +636,22 @@ class GradeController extends Controller
             ->keyBy('student_id');
     }
 
-    private function renderReports($students, string $backUrl)
+    private function renderReports($students, string $backUrl, ?int $year = null)
     {
         $grades = Grade::with('teacher')
             ->whereIn('student_id', $students->pluck('id'))
             ->orderBy('subject')
             ->get()
             ->groupBy('student_id');
+
+        // Only the subjects of the chosen year level
+        if ($year !== null) {
+            $yearOf = $this->subjectYears();
+
+            $grades = $grades->map(fn ($list) => $list
+                ->filter(fn ($g) => (int) ($yearOf[mb_strtolower($g->subject)] ?? 0) === $year)
+                ->values());
+        }
 
         return view('grades.report', [
             'students'    => $students,
@@ -599,8 +660,10 @@ class GradeController extends Controller
             'periods'     => Grading::periods(),
             'passing'     => Grading::passing(),
             'backUrl'     => $backUrl,
+            'yearLabel'   => $year === null ? null : Grading::yearLabel($year),
         ]);
     }
+
 
     // The teacher currently assigned to each of a student's subjects: [student_id][grade_id] => name
     private function instructorsFor($students, $grades): array
@@ -646,5 +709,16 @@ class GradeController extends Controller
     private function safeCell($value)
     {
         return is_string($value) && preg_match('/^[=+\-@]/', $value) ? "'" . $value : $value;
+    }
+
+    // subject name (lowercase) => its year level (0 = none)
+    private function subjectYears(): Collection
+    {
+        return Subject::pluck('year_level', 'name')->mapWithKeys(fn ($y, $n) => [mb_strtolower($n) => (int) $y]);
+    }
+
+    private function yearParam(Request $request): ?int
+    {
+        return $request->has('year') ? (int) $request->query('year') : null;
     }
 }

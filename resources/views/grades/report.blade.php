@@ -51,7 +51,7 @@
             <div class="flex-1 text-center">
                 <p class="text-base font-extrabold tracking-wide text-[#0a1f55]">PROFESSIONAL ACADEMY OF THE PHILIPPINES</p>
                 <p class="text-sm font-semibold text-[#7a1230]">College of Computer Studies</p>
-                <p class="mt-1 text-sm font-bold uppercase tracking-widest">Report of Grades</p>
+                <p class="mt-1 text-sm font-bold uppercase tracking-widest">Report of Grades @if ($yearLabel) <span class="text-[#7a1230]">· {{ $yearLabel }}</span> @endif</p>
             </div>
             <div class="w-16"></div>
         </div>

@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use App\Models\StudentEnrollment;
+use App\Support\Grading;
 
 class SectionController extends Controller
 {
@@ -72,11 +73,12 @@ class SectionController extends Controller
     {
         $this->adminOnly($request);
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:50', 'unique:sections,name'],
+        $data = $request->validate([
+            'name'       => ['required', 'string', 'max:50', 'unique:sections,name'],
+            'year_level' => ['nullable', Rule::in(array_keys(Grading::yearLevels()))],
         ]);
 
-        Section::create(['name' => trim($request->name)]);
+        Section::create(['name' => trim($data['name']), 'year_level' => $data['year_level'] ?? null]);
 
         return redirect()->route('sections.index')->with('success', 'Section created.');
     }
@@ -85,13 +87,14 @@ class SectionController extends Controller
     {
         $this->adminOnly($request);
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:50', Rule::unique('sections', 'name')->ignore($section->id)],
+        $data = $request->validate([
+            'name'       => ['required', 'string', 'max:50', Rule::unique('sections', 'name')->ignore($section->id)],
+            'year_level' => ['nullable', Rule::in(array_keys(Grading::yearLevels()))],
         ]);
 
-        $section->update(['name' => trim($request->name)]);
+        $section->update(['name' => trim($data['name']), 'year_level' => $data['year_level'] ?? null]);
 
-        return redirect()->route('sections.index')->with('success', 'Section renamed.');
+        return redirect()->route('sections.index')->with('success', 'Section updated.');
     }
 
     public function destroy(Request $request, Section $section)

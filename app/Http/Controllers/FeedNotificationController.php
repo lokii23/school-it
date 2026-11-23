@@ -31,6 +31,25 @@ class FeedNotificationController extends Controller
         return response()->json(['unread' => $this->unread($request->user()->id)]);
     }
 
+    // Called every few seconds by every open page: returns only what is new since "after"
+    public function poll(Request $request)
+    {
+        $me    = $request->user();
+        $after = max(0, (int) $request->query('after', 0));
+
+        $items = FeedNotification::with(['actor', 'post'])
+            ->where('user_id', $me->id)
+            ->where('id', '>', $after)
+            ->orderBy('id')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'unread' => $this->unread($me->id),
+            'items'  => $items->map(fn ($n) => $this->payload($n))->values(),
+        ]);
+    }
+
     public function readAll(Request $request)
     {
         FeedNotification::where('user_id', $request->user()->id)->whereNull('read_at')->update(['read_at' => now()]);

@@ -21,15 +21,17 @@ class FeedController extends Controller
     {
         $me     = $request->user();
         $filter = $request->filter === 'mine' ? 'mine' : 'all';
+        $isNew  = $request->filled('after');   // the live check asking for posts newer than the ones on screen
 
         $posts = Post::with('author.section')
             ->withCount('comments')
             ->when($request->filled('post'), fn ($q) => $q->whereKey((int) $request->post))
+            ->when($isNew, fn ($q) => $q->where('id', '>', (int) $request->after))
             ->when($filter === 'mine', fn ($q) => $q->where('user_id', $me->id))
             ->orderByRaw('pinned_at is null')      // pinned posts first
             ->orderByDesc('pinned_at')
             ->orderByDesc('id')
-            ->paginate(10)
+            ->paginate($isNew ? 30 : 10)
             ->withQueryString();
 
         $ids = $posts->pluck('id');
@@ -51,8 +53,12 @@ class FeedController extends Controller
 
         $data = compact('posts', 'reactionCounts', 'myReactions');
 
-        // "Load more" asks for the next page and receives just the posts
+        // "Load more" and the live check receive just the posts
         if ($request->ajax()) {
+            if ($isNew && $posts->isEmpty()) {
+                return response('');
+            }
+
             return response(view('feed._posts', $data))
                 ->header('X-Next-Page', $posts->nextPageUrl() ?? '');
         }
@@ -347,5 +353,54 @@ class FeedController extends Controller
             'url'        => route('feed.comments.destroy', $c),
             'author'     => $this->person($c->author),
         ];
+    }
+    
+    // The live check: what changed on the posts that are on screen, and whether there are new ones
+    public function live(Request $request)
+    {
+        $me    = $request->user();
+        $ids   = collect(explode(',', (string) $request->query('ids')))
+            ->map(fn ($i) => (int) $i)->filter()->unique()->take(60)->values();
+        $after = max(0, (int) $request->query('after', 0));
+        $mine  = $request->query('filter') === 'mine';
+
+        $posts = Post::withCount('comments')->whereIn('id', $ids)->get()->keyBy('id');
+
+        $counts = PostReaction::whereIn('post_id', $ids)
+            ->selectRaw('post_id, type, count(*) as c')
+            ->groupBy('post_id', 'type')
+            ->get()
+            ->groupBy('post_id')
+            ->map(fn ($g) => $g->pluck('c', 'type')->all());
+
+        $mineR = PostReaction::whereIn('post_id', $ids)->where('user_id', $me->id)->pluck('type', 'post_id');
+
+        $out = [];
+        foreach ($posts as $id => $p) {
+            $out[$id] = [
+                'counts'   => (object) ($counts->get($id, [])),
+                'mine'     => $mineR[$id] ?? null,
+                'comments' => $p->comments_count,
+                'pinned'   => (bool) $p->pinned_at,
+                'body'     => $p->body ?? '',
+                'mentions' => $p->mentions ?? [],
+                'edited'   => (bool) $p->edited_at,
+            ];
+        }
+
+        $new = Post::where('id', '>', $after)->when($mine, fn ($q) => $q->where('user_id', $me->id));
+
+        return response()->json([
+            'posts'        => (object) $out,
+            'deleted'      => $ids->diff($posts->keys())->values(),
+            'new'          => ['count' => (clone $new)->count()],
+            'announcement' => (int) Announcement::latest()->value('id'),
+        ]);
+    }
+
+    // The small announcement card
+    public function rail()
+    {
+        return view('feed._rail', ['announcements' => Announcement::latest()->take(3)->get()]);
     }
 }

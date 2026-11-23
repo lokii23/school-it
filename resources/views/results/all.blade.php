@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', 'Results')
+@section('live', '8')
 <a href="{{ route('results.index') }}" class="mb-4 inline-block text-sm font-semibold text-slate-500 hover:text-slate-700">← Back to exams</a>
 @section('content')
 @php

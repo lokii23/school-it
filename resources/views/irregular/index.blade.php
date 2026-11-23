@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', 'Irregular Students')
+@section('live', '15')
 
 @section('content')
 @php

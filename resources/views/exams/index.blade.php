@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', auth()->user()->role === 'admin' ? 'Exams & Quizzes' : 'Create Exams')
+@section('live', '10')
 
 @section('content')
 @php

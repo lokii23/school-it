@@ -1,6 +1,7 @@
 @extends('layouts.portal')
 
 @section('title', 'Announcements')
+@section('live', '10')
 
 @section('content')
 <div

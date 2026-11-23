@@ -30,6 +30,7 @@
 @endphp
 
 <article x-data="feedPost({{ Js::from($cfg) }})" x-ref="card" id="post-{{ $post->id }}"
+         data-id="{{ $post->id }}" data-pinned="{{ $post->pinned_at ? 1 : 0 }}"
          :class="tagged ? 'fd-tagged' : ''" class="fd-card fd-in">
 
     {{-- Header --}}

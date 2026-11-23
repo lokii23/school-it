@@ -40,11 +40,17 @@ Route::middleware('auth')->group(function () {
     Route::post('feed', [FeedController::class, 'store'])->middleware('throttle:10,1')->name('feed.store');
     Route::get('feed/people', [FeedController::class, 'people'])->middleware('throttle:90,1')->name('feed.people');
 
-// Notifications
-Route::get('notifications', [FeedNotificationController::class, 'index'])->name('notifications.index');
-Route::get('notifications/count', [FeedNotificationController::class, 'count'])->name('notifications.count');
-Route::post('notifications/read-all', [FeedNotificationController::class, 'readAll'])->name('notifications.readAll');
-Route::post('notifications/{notification}/read', [FeedNotificationController::class, 'read'])->whereNumber('notification')->name('notifications.read');
+    Route::get('feed/live', [FeedController::class, 'live'])->middleware('throttle:120,1')->name('feed.live');
+    Route::get('feed/rail', [FeedController::class, 'rail'])->middleware('throttle:60,1')->name('feed.rail');
+
+
+    // Notifications
+    Route::get('notifications', [FeedNotificationController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/count', [FeedNotificationController::class, 'count'])->name('notifications.count');
+    Route::post('notifications/read-all', [FeedNotificationController::class, 'readAll'])->name('notifications.readAll');
+    Route::post('notifications/{notification}/read', [FeedNotificationController::class, 'read'])->whereNumber('notification')->name('notifications.read');
+    Route::get('notifications/poll', [FeedNotificationController::class, 'poll'])
+    ->middleware('throttle:240,1')->name('notifications.poll');
 
     Route::middleware('throttle:120,1')->group(function () {
         Route::patch('feed/{post}', [FeedController::class, 'update'])->whereNumber('post')->name('feed.update');

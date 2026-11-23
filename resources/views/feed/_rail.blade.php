@@ -4,6 +4,7 @@
 @endphp
 
 {{-- 📢 New announcements: one small card --}}
+<div id="feed-rail" data-latest="{{ $announcements->first()->id ?? 0 }}">
 <section class="fd-card overflow-hidden">
     <div class="fd-rail-head">
         <h3 class="fd-text text-[13px] font-bold">📢 New announcements</h3>
@@ -28,3 +29,4 @@
         <p class="fd-muted px-4 py-6 text-center text-sm">No announcements yet.</p>
     @endforelse
 </section>
+</div>

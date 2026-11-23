@@ -24,22 +24,22 @@
             ['Dashboard', 'dashboard', 'home'], ['Announcements', 'announcements.index', 'bell'],
             ['Users', 'users.index', 'users'], ['Sections', 'sections.index', 'grid'],
             ['Exams & Quizzes', 'exams.index', 'doc'], ['Results', 'results.index', 'chart'],
-            ['Grades', 'grades.index', 'star'], ['My Profile', 'profile.edit', 'profile'],
+            ['Grades', 'grades.index', 'star'], 
             ['Subjects', 'subjects.index', 'book'],
             ['Irregular Students', 'irregular.index', 'users'],
-            ['News Feed', 'feed.index', 'news'],
+            ['News Feed', 'feed.index', 'news'],['My Profile', 'profile.edit', 'profile'],
         ],
         'teacher' => [
             ['Dashboard', 'dashboard', 'home'], ['Create Exams', 'exams.index', 'doc'],
             ['Section Management', 'sections.index', 'grid'], ['Grade Management', 'grades.index', 'star'],
-            ['Results', 'results.index', 'chart'], ['My Profile', 'profile.edit', 'profile'],
-            ['News Feed', 'feed.index', 'news'],
+            ['Results', 'results.index', 'chart'], 
+            ['News Feed', 'feed.index', 'news'],['My Profile', 'profile.edit', 'profile'],
         ],
         default => [
             ['Dashboard', 'dashboard', 'home'], ['Available Exams', 'student.exams', 'clock'],
             ['Results', 'student.results', 'chart'], ['My Grades', 'student.grades', 'star'],
-            ['My Profile', 'profile.edit', 'profile'],
-            ['News Feed', 'feed.index', 'news'],
+            
+            ['News Feed', 'feed.index', 'news'],['My Profile', 'profile.edit', 'profile'],
         ],
     };
 @endphp
@@ -158,10 +158,14 @@
                 </div>
             @endif
 
-            @yield('content')
+            <div id="live-main" data-live="@yield('live')">
+                @yield('content')
+            </div>
         </main>
     </div>
 </div>
 @include('partials.confirm-modal')
+@include('partials.notification-toasts')
+@include('partials.live-refresh')
 </body>
 </html>
