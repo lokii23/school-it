@@ -100,9 +100,7 @@
                     <a href="{{ url('/dashboard') }}" class="rounded-xl bg-[#f6c945] px-5 py-2 text-sm font-semibold text-[#0a1f55] transition hover:bg-[#fde9a8]">Dashboard</a>
                 @else
                     <a href="{{ route('login') }}" class="rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Log in</a>
-                    @if (Route::has('register'))
-                        <a href="{{ route('register') }}" class="hidden rounded-xl bg-[#f6c945] px-5 py-2 text-sm font-semibold text-[#0a1f55] transition hover:bg-[#fde9a8] sm:block">Register</a>
-                    @endif
+                    
                 @endauth
             @endif
         </div>
@@ -144,9 +142,6 @@
                         <a href="{{ route('login') }}" class="group rounded-xl bg-[#f6c945] px-7 py-3.5 font-semibold text-[#0a1f55] shadow-lg shadow-[#f6c945]/20 transition hover:bg-[#fde9a8]">
                             Sign in to portal <span class="inline-block transition group-hover:translate-x-1">→</span>
                         </a>
-                    @endif
-                    @if (Route::has('register'))
-                        <a href="{{ route('register') }}" class="rounded-xl bg-[#7a1230] px-7 py-3.5 font-semibold text-white ring-1 ring-white/20 transition hover:bg-[#9a1a3f]">Create account</a>
                     @endif
                 @endauth
             </div>

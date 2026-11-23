@@ -112,12 +112,6 @@
                 </button>
             </form>
 
-            @if (Route::has('register'))
-                <p class="mt-8 text-center text-sm text-slate-500">
-                    New student?
-                    <a href="{{ route('register') }}" class="font-semibold text-[#7a1230] hover:text-[#5a0c22]">Create an account</a>
-                </p>
-            @endif
         </div>
     </div>
 </div>
