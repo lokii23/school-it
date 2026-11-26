@@ -7,6 +7,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\SubjectAssignment;
 use App\Models\User;
+use App\Support\Regrade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -75,7 +76,7 @@ class ExamController extends Controller
                 'score_mode'       => $data['score_mode'],
             ]);
 
-            $exam->questions()->createMany($this->questionRows($data['questions']));
+            $this->syncQuestions($exam, $data['questions']);
         });
 
         return redirect()->route('exams.index')->with('success', 'Exam published.');
@@ -85,7 +86,7 @@ class ExamController extends Controller
     {
         $this->authorizeExam($request, $exam);
 
-        $exam->load('questions')->loadCount('results');
+        $exam->load(['questions' => fn ($q) => $q->orderBy('id')])->loadCount('results');
 
         return view('exams.form', [
             'exam'       => $exam,
@@ -116,12 +117,19 @@ class ExamController extends Controller
                 'score_mode'       => $data['score_mode'],
             ]);
 
-            // Replace the question set with the submitted one
-            $exam->questions()->delete();
-            $exam->questions()->createMany($this->questionRows($data['questions']));
+            $this->syncQuestions($exam, $data['questions']);
         });
 
-        return redirect()->route('exams.index')->with('success', 'Exam updated.');
+        // Students' submitted answers are marked again with the updated questions and correct answers
+        $r   = Regrade::exam($exam->fresh());
+        $msg = 'Exam updated.';
+
+        if ($r['results'] > 0) {
+            $msg .= " {$r['results']} submitted " . ($r['results'] === 1 ? 'attempt was' : 'attempts were')
+                  . " re-marked, and {$r['changed']} " . ($r['changed'] === 1 ? 'score' : 'scores') . ' changed.';
+        }
+
+        return redirect()->route('exams.index')->with('success', $msg);
     }
 
     public function destroy(Request $request, Exam $exam)
@@ -131,6 +139,34 @@ class ExamController extends Controller
         $exam->delete();
 
         return redirect()->route('exams.index')->with('success', 'Exam deleted.');
+    }
+
+    // ---------- questions ----------
+
+    // Updates the questions in place so each keeps its id. New ones are added, removed ones are deleted.
+    private function syncQuestions(Exam $exam, array $questions): void
+    {
+        $existing = $exam->questions()->get()->keyBy('id');
+        $keep     = [];
+
+        foreach ($questions as $q) {
+            $row = [
+                'question' => trim($q['question']),
+                'options'  => array_values(array_map('trim', $q['options'])),
+                'answer'   => (int) $q['answer'],
+            ];
+
+            $id = isset($q['id']) ? (int) $q['id'] : 0;
+
+            if ($id && $existing->has($id) && ! in_array($id, $keep, true)) {
+                $existing[$id]->update($row);
+                $keep[] = $id;
+            } else {
+                $keep[] = $exam->questions()->create($row)->id;
+            }
+        }
+
+        $exam->questions()->whereNotIn('id', $keep)->delete();
     }
 
     // ---------- access rules ----------
@@ -155,7 +191,7 @@ class ExamController extends Controller
     private function subjectMap(User $user): array
     {
         if ($user->role === 'admin') {
-            $names = Subject::orderBy('name')->pluck('name')->all();
+            $names = Subject::orderBy('name')->pluck('name')->unique()->values()->all();
 
             return $names ? Section::pluck('id')->mapWithKeys(fn ($id) => [$id => $names])->all() : [];
         }
@@ -211,6 +247,7 @@ class ExamController extends Controller
             'review_mode'           => ['required', Rule::in(['off', 'after_submit', 'after_close'])],
             'score_mode'            => ['required', Rule::in(['immediate', 'after_close'])],
             'questions'             => ['required', 'array', 'min:1', 'max:100'],
+            'questions.*.id'        => ['nullable', 'integer'],
             'questions.*.question'  => ['required', 'string', 'max:1000'],
             'questions.*.options'   => ['required', 'array', 'size:4'],
             'questions.*.options.*' => ['required', 'string', 'max:300'],
@@ -243,14 +280,5 @@ class ExamController extends Controller
                 'closes_at' => 'Set a closing time. Scores are hidden until the exam closes.',
             ]);
         }
-    }
-
-    private function questionRows(array $questions): array
-    {
-        return collect($questions)->map(fn ($q) => [
-            'question' => trim($q['question']),
-            'options'  => array_values(array_map('trim', $q['options'])),
-            'answer'   => (int) $q['answer'],
-        ])->values()->all();
     }
 }

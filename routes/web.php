@@ -107,6 +107,7 @@ Route::middleware('auth')->group(function () {
         Route::get('results/exam/{exam}/export', [ResultController::class, 'examExport'])->whereNumber('exam')->name('results.exam.export');
         Route::get('results/{result}', [ResultController::class, 'show'])->whereNumber('result')->name('results.show');
         Route::delete('results/{result}', [ResultController::class, 'destroy'])->name('results.destroy');
+        Route::patch('results/{result}/score', [ResultController::class, 'score'])->whereNumber('result')->name('results.score');
 
         // Grades (grade table, exports and printouts)
         Route::prefix('grades')->name('grades.')->group(function () {

@@ -44,6 +44,9 @@
                         <p class="mt-3 text-lg font-semibold text-[#0a1f55]">Keep going, you’ll do better next time.</p>
                     @endif
                     <p class="mt-1 text-sm text-slate-400">Passing score: {{ $passing }}% · Submitted {{ $result->created_at->format('M d, Y g:i A') }}</p>
+                    @if ($result->adjusted_at)
+                        <p class="mt-2 text-xs font-semibold text-[#7a5a00]">✎ Your teacher adjusted this score.</p>
+                    @endif
                 </div>
 
                 <div class="mt-8 grid gap-3 text-sm sm:grid-cols-3">

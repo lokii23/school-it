@@ -209,6 +209,7 @@ class StudentExamController extends Controller
 
             // Snapshot of the exam exactly as this student saw it
             $snapshot = $questions->map(fn ($q) => [
+                'qid'      => $q->id,
                 'question' => $q->question,
                 'options'  => $q->options,
                 'correct'  => (int) $q->answer,

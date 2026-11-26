@@ -6,13 +6,14 @@
 @php
     $inputBase = 'w-full rounded-xl border-0 bg-white px-4 py-3 text-slate-900 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-[#0a1f55]';
 
-    $blank = ['question' => '', 'options' => ['', '', '', ''], 'answer' => 0];
+    $blank = ['id' => null, 'question' => '', 'options' => ['', '', '', ''], 'answer' => 0];
 
     $source = old('questions', $exam->exists
-        ? $exam->questions->map(fn ($q) => ['question' => $q->question, 'options' => $q->options, 'answer' => $q->answer])->all()
+        ? $exam->questions->map(fn ($q) => ['id' => $q->id, 'question' => $q->question, 'options' => $q->options, 'answer' => $q->answer])->all()
         : [$blank]);
 
     $initial = collect($source)->map(fn ($q) => [
+        'id'       => $q['id'] ?? null,
         'question' => $q['question'] ?? '',
         'options'  => array_pad(array_values($q['options'] ?? []), 4, ''),
         'answer'   => (int) ($q['answer'] ?? 0),
@@ -37,9 +38,9 @@
                 this.passkey = Array.from(r, n => c[n % c.length]).join('');
             },
           questions: {{ Js::from($initial) }},
-          add() { this.questions.push({ question: '', options: ['', '', '', ''], answer: 0 }); this.$nextTick(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })); },
+          add() { this.questions.push({ id: null, question: '', options: ['', '', '', ''], answer: 0 }); this.$nextTick(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })); },
           remove(i) { if (this.questions.length > 1) this.questions.splice(i, 1); },
-          dup(i) { this.questions.splice(i + 1, 0, JSON.parse(JSON.stringify(this.questions[i]))); },
+          dup(i) { const c = JSON.parse(JSON.stringify(this.questions[i])); c.id = null; this.questions.splice(i + 1, 0, c); },
       }"
       class="mx-auto max-w-4xl space-y-6">
     @csrf
@@ -49,7 +50,7 @@
     @if ($exam->exists && $exam->results_count > 0)
         <div class="rounded-xl border-l-4 border-[#f6c945] bg-white px-5 py-4 text-sm shadow-sm ring-1 ring-slate-200">
             <p class="font-semibold text-[#0a1f55]">⚠ {{ $exam->results_count }} {{ Str::plural('student', $exam->results_count) }} already took this exam.</p>
-            <p class="mt-1 text-slate-500">Changing questions or answers will not recalculate their saved scores. Only edit for typos and small fixes.</p>
+            <p class="mt-1 text-slate-500">When you save, their submitted answers are marked again with your updated questions and correct answers, so their scores change automatically. A score you set by hand in Results is kept. Deleting a question removes it from their score. Questions you add are not counted for students who already submitted.</p>
         </div>
     @endif
 
@@ -242,6 +243,7 @@
             </div>
 
             <div class="space-y-4 p-6">
+                <input type="hidden" :name="'questions[' + i + '][id]'" :value="q.id || ''">
                 <textarea :name="'questions[' + i + '][question]'" x-model="q.question" rows="2" required maxlength="1000"
                           placeholder="Type the question here…"
                           class="{{ $inputBase }}"></textarea>

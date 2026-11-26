@@ -9,12 +9,12 @@ use App\Models\Section;
 use App\Models\SubjectAssignment;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use App\Support\Roster;
 
 class ResultController extends Controller
 {
-    private const PASSING = 75; // percent, same as StudentExamController
+    private const PASSING = 70; // percent, same as StudentExamController
 
     // ===================== Teacher / Admin =====================
 
@@ -50,10 +50,6 @@ class ResultController extends Controller
             )
             ->groupBy('exam_id')->get()->keyBy('exam_id');
 
-        $enrolled = $exams->getCollection()->mapWithKeys(fn ($e) => [
-            $e->id => Roster::offering($e->section_id, $e->subject)->count(),
-        ]);
-
         // Overall numbers for the summary cards
         $overall = ExamResult::whereHas('exam', fn ($q) => $q->managedBy($user))
             ->selectRaw(
@@ -66,7 +62,6 @@ class ResultController extends Controller
         return view('results.index', [
             'exams'     => $exams,
             'stats'     => $stats,
-            'enrolled'  => $enrolled,
             'overall'   => $overall,
             'examCount' => Exam::managedBy($user)->count(),
             'sections'  => $this->sectionsFor($user),
@@ -74,7 +69,7 @@ class ResultController extends Controller
         ]);
     }
 
-    // One exam: the whole section, who took it, and how they did
+    // One exam: only the students who submitted it
     public function exam(Request $request, Exam $exam)
     {
         $this->authorizeExam($request->user(), $exam);
@@ -82,15 +77,13 @@ class ResultController extends Controller
 
         [$rows, $results] = $this->buildRows($exam);
 
-        $taken    = $rows->whereNotNull('pct');
-        $percents = $taken->pluck('pct');
+        $percents = $rows->pluck('pct');
 
         $summary = [
-            'enrolled' => $rows->count(),
-            'taken'    => $taken->count(),
-            'pending'  => $rows->where('state', 'pending')->count(),
+            'taken'    => $rows->count(),
             'passed'   => $rows->where('state', 'passed')->count(),
             'failed'   => $rows->where('state', 'failed')->count(),
+            'adjusted' => $rows->filter(fn ($r) => $r['result']->adjusted_at)->count(),
             'avg'      => $percents->isNotEmpty() ? (int) round($percents->avg()) : null,
             'high'     => $percents->max(),
             'low'      => $percents->min(),
@@ -117,37 +110,29 @@ class ResultController extends Controller
     public function examExport(Request $request, Exam $exam): StreamedResponse
     {
         $this->authorizeExam($request->user(), $exam);
-        $exam->load('section');
 
         [$rows] = $this->buildRows($exam);
-        $name   = 'results-' . \Illuminate\Support\Str::slug($exam->title) . '-' . now()->format('Ymd') . '.csv';
+        $name   = 'results-' . Str::slug($exam->title) . '-' . now()->format('Ymd') . '.csv';
 
-        return response()->streamDownload(function () use ($rows, $exam) {
+        return response()->streamDownload(function () use ($rows) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel reads names correctly
 
-            fputcsv($out, ['Student', 'Email', 'Section', 'Status', 'Score', 'Total', 'Percent', 'Result', 'Date taken', 'Time taken (min)']);
+            fputcsv($out, ['Student', 'Email', 'Section', 'Score', 'Total', 'Percent', 'Result', 'Score adjusted', 'Date submitted', 'Time taken (min)']);
 
             foreach ($rows as $row) {
                 $r = $row['result'];
 
-                $status = match (true) {
-                    (bool) $r                  => 'Submitted',
-                    $row['in_progress']        => 'In progress',
-                    $exam->status === 'closed' => 'Missed',
-                    default                    => 'Not taken yet',
-                };
-
                 fputcsv($out, array_map([$this, 'safeCell'], [
                     $row['student']->list_name,
                     $row['student']->email,
-                    $exam->section->name ?? '',
-                    $status,
-                    $r->score ?? '',
-                    $r->total ?? '',
-                    $row['pct'] !== null ? $row['pct'] . '%' : '',
-                    $row['state'] === 'passed' ? 'Passed' : ($row['state'] === 'failed' ? 'Failed' : ''),
-                    $r ? $r->created_at->format('Y-m-d H:i') : '',
+                    $row['student']->section->name ?? '',
+                    $r->score,
+                    $r->total,
+                    $row['pct'] . '%',
+                    $row['state'] === 'passed' ? 'Passed' : 'Failed',
+                    $r->adjusted_at ? 'Yes' : 'No',
+                    $r->created_at->format('Y-m-d H:i'),
                     $row['time'] !== null ? round($row['time'] / 60, 1) : '',
                 ]));
             }
@@ -237,6 +222,45 @@ class ResultController extends Controller
         ]);
     }
 
+    // The teacher changes a student's score, or goes back to the automatic one
+    public function score(Request $request, ExamResult $result)
+    {
+        $result->load(['exam', 'student']);
+        $user = $request->user();
+
+        abort_unless($result->exam && $result->exam->isManagedBy($user), 403);
+
+        $name = $result->student->name ?? 'The student';
+        $auto = (int) ($result->auto_score ?? $result->score);   // what the answers are worth
+
+        if ($request->boolean('reset')) {
+            $result->update(['score' => $auto, 'auto_score' => null, 'adjusted_at' => null, 'adjusted_by' => null]);
+
+            return back()->with('success', "{$name}'s score is back to the automatic {$auto} / {$result->total}.");
+        }
+
+        $data = $request->validate([
+            'score' => ['required', 'integer', 'min:0', 'max:' . (int) $result->total],
+        ], [
+            'score.required' => 'Enter a score.',
+            'score.integer'  => 'The score must be a whole number.',
+            'score.min'      => 'The score cannot be below 0.',
+            'score.max'      => "The score can't be higher than {$result->total}, the number of questions.",
+        ]);
+
+        $new = (int) $data['score'];
+        $old = (int) $result->score;
+
+        if ($new === $auto) {
+            // Same as the automatic score: nothing to mark as adjusted
+            $result->update(['score' => $auto, 'auto_score' => null, 'adjusted_at' => null, 'adjusted_by' => null]);
+        } else {
+            $result->update(['score' => $new, 'auto_score' => $auto, 'adjusted_at' => now(), 'adjusted_by' => $user->id]);
+        }
+
+        return back()->with('success', "{$name}'s score changed from {$old} to {$new} / {$result->total}.");
+    }
+
     // Reset an attempt so the student can retake the exam
     public function destroy(Request $request, ExamResult $result)
     {
@@ -297,35 +321,27 @@ class ResultController extends Controller
             ->get();
     }
 
-    // Every student of the section, with or without a result
+    // Only the students who submitted, newest first
     private function buildRows(Exam $exam): array
     {
-        $results  = ExamResult::where('exam_id', $exam->id)->get();
-        $byUser   = $results->keyBy('user_id');
+        $results  = ExamResult::with(['student.section', 'adjuster'])
+            ->where('exam_id', $exam->id)
+            ->whereHas('student')
+            ->latest()
+            ->get();
+
         $attempts = ExamAttempt::where('exam_id', $exam->id)->get()->keyBy('user_id');
 
-        $students = Roster::offering($exam->section_id, $exam->subject)
-            ->orderByRaw('COALESCE(last_name, name), name')
-            ->get();
-
-        // Students who took it but have since moved to another section
-        $extra = User::whereIn('id', $results->pluck('user_id'))
-            ->whereNotIn('id', $students->pluck('id'))
-            ->get();
-
-        $rows = $students->concat($extra)->map(function ($s) use ($byUser, $attempts) {
-            $r = $byUser->get($s->id);
-            $a = $attempts->get($s->id);
-
-            $pct = $r && $r->total ? (int) round($r->score / $r->total * 100) : ($r ? 0 : null);
+        $rows = $results->map(function ($r) use ($attempts) {
+            $a   = $attempts->get($r->user_id);
+            $pct = $r->total ? (int) round($r->score / $r->total * 100) : 0;
 
             return [
-                'student'     => $s,
-                'result'      => $r,
-                'pct'         => $pct,
-                'state'       => $r ? ($pct >= self::PASSING ? 'passed' : 'failed') : 'pending',
-                'in_progress' => $a && ! $r,
-                'time'        => ($r && $a) ? max(0, $r->created_at->timestamp - $a->started_at->timestamp) : null,
+                'student' => $r->student,
+                'result'  => $r,
+                'pct'     => $pct,
+                'state'   => $pct >= self::PASSING ? 'passed' : 'failed',
+                'time'    => $a ? max(0, $r->created_at->timestamp - $a->started_at->timestamp) : null,
             ];
         })->values();
 
