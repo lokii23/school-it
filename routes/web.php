@@ -97,7 +97,9 @@ Route::middleware('auth')->group(function () {
         Route::get('sections', [SectionController::class, 'index'])->name('sections.index');
 
         // Exams
+        Route::post('exams/{exam}/duplicate', [ExamController::class, 'duplicate'])->whereNumber('exam')->name('exams.duplicate');
         Route::resource('exams', ExamController::class)->except('show');
+        
 
         // Results
         Route::get('results', [ResultController::class, 'index'])->name('results.index');

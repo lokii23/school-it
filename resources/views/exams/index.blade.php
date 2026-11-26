@@ -4,6 +4,20 @@
 @section('live', '10')
 
 @section('content')
+<div x-data="{
+        cOpen: {{ old('_form') === 'copy' ? 'true' : 'false' }},
+        c: { id: {{ Js::from(old('_edit_id')) }}, name: '', questions: 0, closes: false, type: 'exam' },
+        title: {{ Js::from(old('title', '')) }},
+        section: {{ Js::from((string) old('section_id', '')) }},
+        subject: {{ Js::from(old('subject', '')) }},
+        keepKey: false, passkey: {{ Js::from(old('passkey', '')) }}, keepTimes: false,
+        map: {{ Js::from($copyMap) }},
+        get subjects() { const l = [...(this.map[this.section] || [])]; if (this.subject && !l.includes(this.subject)) l.push(this.subject); return l; },
+        openCopy(e) {
+            this.c = e; this.title = e.title; this.section = e.section_id; this.subject = e.subject;
+            this.keepKey = false; this.passkey = ''; this.keepTimes = false; this.cOpen = true;
+        },
+     }">
 @php
     $isAdmin = auth()->user()->role === 'admin';
     $filtered = request()->hasAny(['q', 'type', 'section_id']);
@@ -144,12 +158,25 @@
                             @endif
 
                             <td class="px-6 py-4">
-                                <div class="flex justify-end gap-2">
+                                <div class="flex flex-wrap justify-end gap-2">
                                     <a href="{{ route('exams.edit', $e) }}"
                                     class="rounded-lg bg-[#0a1f55]/10 px-3.5 py-1.5 text-xs font-semibold text-[#0a1f55] transition hover:bg-[#0a1f55] hover:text-white">Edit</a>
 
+                                    <button type="button"
+                                            @click="openCopy({{ Js::from([
+                                                'id'         => $e->id,
+                                                'title'      => 'Copy of ' . $e->title,
+                                                'name'       => $e->title,
+                                                'section_id' => (string) $e->section_id,
+                                                'subject'    => $e->subject,
+                                                'questions'  => $e->questions_count,
+                                                'closes'     => (bool) $e->closes_at,
+                                                'type'       => $e->type,
+                                            ]) }})"
+                                            class="rounded-lg bg-[#f6c945]/40 px-3.5 py-1.5 text-xs font-semibold text-[#7a5a00] transition hover:bg-[#f6c945]">Copy</button>
+
                                     <form method="POST" action="{{ route('exams.destroy', $e) }}"
-                                        onsubmit="return confirm('Delete “{{ addslashes($e->title) }}”?{{ $e->results_count ? ' This will also delete ' . $e->results_count . ' student result(s).' : '' }}')">
+                                        data-confirm="Delete “{{ $e->title }}”? {{ $e->results_count ? 'This will also delete ' . $e->results_count . ' student result(s). ' : '' }}This cannot be undone.">
                                         @csrf @method('DELETE')
                                         <button class="rounded-lg bg-[#7a1230]/10 px-3.5 py-1.5 text-xs font-semibold text-[#7a1230] transition hover:bg-[#7a1230] hover:text-white">Delete</button>
                                     </form>
@@ -165,4 +192,88 @@
     <div class="mt-6">{{ $exams->links() }}</div>
 
 @endif
+
+{{-- ============ MODAL: copy this exam ============ --}}
+<div x-show="cOpen" x-transition.opacity style="display:none"
+     class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#071640]/70 p-4 sm:items-center" @keydown.escape.window="cOpen = false">
+    <div @click.outside="cOpen = false" class="my-8 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b-2 border-[#f6c945] bg-[#0a1f55] px-6 py-4 text-white">
+            <div class="min-w-0">
+                <h2 class="text-lg font-semibold">Copy <span x-text="c.type"></span></h2>
+                <p class="truncate text-xs text-slate-300"><span x-text="c.name"></span> · <span x-text="c.questions"></span> questions</p>
+            </div>
+            <button type="button" @click="cOpen = false" class="text-white/70 hover:text-white">✕</button>
+        </div>
+
+        <form method="POST" :action="'{{ url('exams') }}/' + c.id + '/duplicate'" class="space-y-5 p-6">
+            @csrf
+            <input type="hidden" name="_form" value="copy">
+            <input type="hidden" name="_edit_id" :value="c.id">
+            <input type="hidden" name="keep_times" :value="keepTimes ? 1 : 0">
+            <input type="hidden" name="passkey" :value="keepKey ? '' : passkey" :disabled="keepKey">
+
+            @if (old('_form') === 'copy' && $errors->any())
+                <div class="rounded-xl border-l-4 border-[#7a1230] bg-[#7a1230]/5 px-4 py-3 text-sm text-[#7a1230]">
+                    {{ collect($errors->all())->unique()->first() }}
+                </div>
+            @endif
+
+            <div>
+                <label class="mb-1.5 block text-sm font-medium text-slate-700">Title of the copy</label>
+                <input type="text" name="title" x-model="title" required maxlength="150"
+                       class="w-full rounded-xl border-0 bg-white px-4 py-3 text-slate-900 shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0a1f55]">
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">Section</label>
+                    <select name="section_id" x-model="section" @change="subject = ''" required
+                            class="w-full rounded-xl border-0 bg-white px-4 py-3 text-slate-900 shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0a1f55]">
+                        <option value="">— Choose section —</option>
+                        @foreach ($sections as $s) <option value="{{ $s->id }}">{{ $s->name }}</option> @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">Subject</label>
+                    <select name="subject" x-model="subject" required :disabled="!section"
+                            class="w-full rounded-xl border-0 bg-white px-4 py-3 text-slate-900 shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0a1f55] disabled:bg-slate-100">
+                        <option value="">— Choose subject —</option>
+                        <template x-for="s in subjects" :key="s"><option :value="s" x-text="s" :selected="s === subject"></option></template>
+                    </select>
+                </div>
+            </div>
+
+            <div class="rounded-xl bg-[#fbf8f1] p-4">
+                <p class="mb-2 text-sm font-semibold text-[#0a1f55]">Passkey</p>
+                <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                    <input type="radio" :value="false" x-model="keepKey" class="h-4 w-4 border-slate-300 text-[#7a1230] focus:ring-[#7a1230]"> Make a new random one
+                </label>
+                <label class="mt-1.5 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                    <input type="radio" :value="true" x-model="keepKey" @change="passkey = ''" class="h-4 w-4 border-slate-300 text-[#7a1230] focus:ring-[#7a1230]"> Type my own
+                </label>
+                <input type="text" x-show="keepKey" x-model="passkey" maxlength="20" placeholder="At least 4 characters" style="display:none"
+                       class="mt-2 w-full rounded-xl border-0 bg-white px-4 py-2.5 font-mono uppercase tracking-widest shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0a1f55]">
+            </div>
+
+            <label class="flex cursor-pointer items-start gap-3 text-sm text-slate-700">
+                <input type="checkbox" x-model="keepTimes" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#7a1230] focus:ring-[#7a1230]">
+                <span>Keep the open and close times
+                    <span class="block text-xs text-slate-400">Leave this off if the copy is for a different date. You can set the times when you review it.</span></span>
+            </label>
+
+            <p class="rounded-xl bg-[#fbf8f1] px-4 py-3 text-xs text-slate-500">
+                Copies the questions, correct answers, time limit and review and score settings. Students' results are <strong>not</strong> copied. The copy is open to the section right away unless you set times, so review it first.
+            </p>
+
+            <div class="flex justify-end gap-3 pt-1">
+                <button type="button" @click="cOpen = false" class="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                <button type="submit" :disabled="!title.trim() || !section || !subject || (keepKey && passkey.trim().length < 4)"
+                        class="rounded-xl bg-[#7a1230] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#7a1230]/20 transition hover:bg-[#5a0c22] disabled:opacity-50">Make copy</button>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+
+
 @endsection

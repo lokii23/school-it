@@ -34,7 +34,11 @@ class ExamController extends Controller
 
         $sections = $this->sectionsFor($user);
 
-        return view('exams.index', compact('exams', 'sections'));
+        return view('exams.index', [
+            'exams'    => $exams,
+            'sections' => $sections,
+            'copyMap'  => $this->subjectMap($user),
+        ]);
     }
 
     public function create(Request $request)
@@ -280,5 +284,72 @@ class ExamController extends Controller
                 'closes_at' => 'Set a closing time. Scores are hidden until the exam closes.',
             ]);
         }
+    }
+
+
+    // Makes a copy of an exam for another section or subject. Results and attempts are not copied.
+    public function duplicate(Request $request, Exam $exam)
+    {
+        $this->authorizeExam($request, $exam);
+
+        $data = $request->validate([
+            'title'      => ['required', 'string', 'max:150'],
+            'section_id' => ['required', 'exists:sections,id'],
+            'subject'    => ['required', 'string', 'max:100'],
+            'passkey'    => ['nullable', 'string', 'min:4', 'max:20'],
+            'keep_times' => ['nullable', 'boolean'],
+        ], [
+            'section_id.required' => 'Please choose a section for the copy.',
+            'subject.required'    => 'Please choose a subject for the copy.',
+            'passkey.min'         => 'The passkey needs at least 4 characters.',
+        ]);
+
+        // The copy follows the same rule as a new exam: a teacher can only use their own section and subject
+        $subject = $this->resolveSubject($request->user(), $data);
+
+        $passkey = ! empty($data['passkey'])
+            ? strtoupper(trim($data['passkey']))
+            : $this->newPasskey();
+
+        $copy = DB::transaction(function () use ($exam, $data, $subject, $passkey, $request) {
+            $copy = Exam::create([
+                'user_id'          => $request->user()->id,
+                'section_id'       => $data['section_id'],
+                'title'            => trim($data['title']),
+                'subject'          => $subject,
+                'type'             => $exam->type,
+                'passkey'          => $passkey,
+                'duration_minutes' => $exam->duration_minutes,
+                'opens_at'         => $request->boolean('keep_times') ? $exam->opens_at : null,
+                'closes_at'        => $request->boolean('keep_times') ? $exam->closes_at : null,
+                'review_mode'      => $exam->review_mode,
+                // Hidden scores need a closing time. Without one, the copy shows scores right away.
+                'score_mode'       => ($exam->score_mode === 'after_close' && ! ($request->boolean('keep_times') && $exam->closes_at))
+                    ? 'immediate'
+                    : $exam->score_mode,
+            ]);
+
+            $copy->questions()->createMany($exam->questions()->orderBy('id')->get()
+                ->map(fn ($q) => ['question' => $q->question, 'options' => $q->options, 'answer' => $q->answer])
+                ->all());
+
+            return $copy;
+        });
+
+        return redirect()->route('exams.edit', $copy)
+            ->with('success', "Copied as “{$copy->title}” with {$exam->questions()->count()} questions. Review it, then check the passkey and times.");
+    }
+
+    // A random passkey like K7M2QX (no look-alike characters)
+    private function newPasskey(): string
+    {
+        $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $out   = '';
+
+        for ($i = 0; $i < 6; $i++) {
+            $out .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+
+        return $out;
     }
 }
